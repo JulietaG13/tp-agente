@@ -1,59 +1,51 @@
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
-
 from dotenv import load_dotenv
+from services.service import FileService
+
 load_dotenv()
 
-# tools de ejemplo
+file_service = FileService()
+
+
 @tool
-def calculator(operation: str) -> str:
+def read_text_file(file_path: str) -> str:
+    """Lee el contenido completo de un archivo .txt"""
     try:
-        # Evaluar la operación matemática de forma segura
-        result = eval(operation, {"__builtins__": {}}, {})
-        return f"El resultado de {operation} es: {result}"
+        return file_service.read_txt_file(file_path)
     except Exception as e:
-        return f"Error al calcular: {str(e)}"
+        return f"Error al leer el archivo: {str(e)}"
 
 
 @tool
-def string_length(text: str) -> str:
-    length = len(text)
-    return f"El texto '{text}' tiene {length} caracteres"
+def search_in_text_file(file_path: str, search_term: str, case_sensitive: bool = False) -> str:
+    """Busca un término en un archivo .txt"""
+    try:
+        results = file_service.search_in_file(file_path, search_term, case_sensitive)
+        if not results:
+            return f"No se encontraron resultados para '{search_term}' en el archivo."
+        output = f"Encontrados {len(results)} resultados para '{search_term}':\n\n"
+        for result in results:
+            output += f"Línea {result['line_number']}: {result['content']}\n"
+        return output
+    except Exception as e:
+        return f"Error en búsqueda: {str(e)}"
 
 
-tools = [calculator, string_length]
+tools = [read_text_file, search_in_text_file]
 
 if __name__ == "__main__":
     agent = create_react_agent(
         model="openai:gpt-4o-mini",
         tools=tools,
-        prompt="Eres un asistente útil que puede realizar cálculos y contar caracteres."
+        prompt="Eres un asistente que puede leer y buscar en archivos .txt. Ayuda al usuario a procesar archivos de texto."
     )
 
-    # Ejemplos
     print("=" * 60)
-    print("EJEMPLO 1: Calculadora")
-    print("=" * 60)
-
-    result = agent.invoke({
-        "messages": [{"role": "user", "content": "¿Cuánto es 25 * 4 + 10?"}]
-    })
-    print(f"\nRespuesta: {result['messages'][-1].content}\n")
-
-    print("=" * 60)
-    print("EJEMPLO 2: Longitud de texto")
+    print("EJEMPLO: Leer archivo .txt")
     print("=" * 60)
 
     result = agent.invoke({
-        "messages": [{"role": "user", "content": "¿Cuántos caracteres tiene la palabra 'LangGraph'?"}]
-    })
-    print(f"\nRespuesta: {result['messages'][-1].content}\n")
-
-    print("=" * 60)
-    print("EJEMPLO 3: Múltiples tools")
-    print("=" * 60)
-
-    result = agent.invoke({
-        "messages": [{"role": "user", "content": "Calcula 15 * 3 y luego cuenta cuántos caracteres tiene el resultado"}]
+        "messages": [{"role": "user", "content": "Lee el archivo SD-Com.txt y dame un resumen"}]
     })
     print(f"\nRespuesta: {result['messages'][-1].content}\n")
