@@ -48,6 +48,12 @@ class MCQService:
         """Obtiene todas las respuestas almacenadas"""
         return self._answers.copy()
 
+    def get_last_question_id(self) -> Optional[str]:
+        """Retorna el ID de la pregunta creada más recientemente"""
+        if not self._questions:
+            return None
+        return max(self._questions.items(), key=lambda item: item[1].get('created_at'))[0]
+
 
 class FileService:
     @staticmethod

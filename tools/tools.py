@@ -64,6 +64,17 @@ def check_multiple_choice_answer(question_id: str, user_answer: str) -> str:
         return f"Error al verificar respuesta: {str(e)}"
 
 
+def check_last_multiple_choice_answer(user_answer: str) -> str:
+    """Verifica la respuesta del usuario contra la última pregunta creada"""
+    try:
+        last_id = mcq_service.get_last_question_id()
+        if not last_id:
+            return "Error: No hay preguntas registradas aún"
+        return check_multiple_choice_answer(last_id, user_answer)
+    except Exception as e:
+        return f"Error al verificar respuesta para la última pregunta: {str(e)}"
+
+
 def register_multiple_choice_question(question: str, options: list, correct_index: int) -> str:
     """Registra una pregunta de opción múltiple con 4 opciones y la respuesta correcta por índice (0-3)."""
     try:
@@ -76,15 +87,21 @@ def register_multiple_choice_question(question: str, options: list, correct_inde
         if not isinstance(correct_index, int) or not (0 <= correct_index < 4):
             return "Error: 'correct_index' debe ser un entero entre 0 y 3"
 
-        correct_answer = options[correct_index]
-        question_id = mcq_service.store_question(question, options, correct_answer)
+        # Aleatorizar el orden de opciones para evitar sesgo (que no sea siempre sea la A, por ejemplo)
+        import random
+        indexed_options = list(enumerate(options))
+        random.shuffle(indexed_options)
+        shuffled_options = [opt for _, opt in indexed_options]
+        # Calcular la nueva posición de la opción correcta tras mezclar
+        original_correct_answer = options[correct_index]
+        correct_answer = original_correct_answer
+        question_id = mcq_service.store_question(question, shuffled_options, correct_answer)
 
         result = f"Pregunta registrada con ID: {question_id}\n\n"
         result += f"Pregunta: {question}\n\n"
         result += "Opciones:\n"
-        for i, option in enumerate(options, 1):
+        for i, option in enumerate(shuffled_options, 1):
             result += f"{chr(64+i)}) {option}\n"
-        result += f"\nRespuesta correcta: {chr(65+correct_index)}) {correct_answer}"
 
         return result
     except Exception as e:
@@ -159,6 +176,23 @@ TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
+            "name": "check_last_multiple_choice_answer",
+            "description": "Verifica si la respuesta del usuario es correcta para la última pregunta creada",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_answer": {
+                        "type": "string",
+                        "description": "Respuesta del usuario (letra A-D o texto completo)"
+                    }
+                },
+                "required": ["user_answer"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "register_multiple_choice_question",
             "description": "Registra una pregunta con 4 opciones y el índice correcto (0-3)",
             "parameters": {
@@ -192,5 +226,6 @@ TOOLS_MAP = {
     "read_text_file": read_text_file,
     "search_in_text_file": search_in_text_file,
     "check_multiple_choice_answer": check_multiple_choice_answer,
+    "check_last_multiple_choice_answer": check_last_multiple_choice_answer,
     "register_multiple_choice_question": register_multiple_choice_question
 }

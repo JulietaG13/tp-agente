@@ -3,6 +3,7 @@ from langgraph.prebuilt import create_react_agent
 from dotenv import load_dotenv
 from services.service import FileService, MCQService
 from tools.tools import check_multiple_choice_answer as check_answer_func
+from tools.tools import check_last_multiple_choice_answer as check_last_answer_func
 from tools.tools import register_multiple_choice_question as register_mcq_func
 
 load_dotenv()
@@ -46,11 +47,17 @@ def register_multiple_choice_question(question: str, options: list, correct_inde
     """Registra una pregunta con 4 opciones y el índice correcto (0-3)"""
     return register_mcq_func(question, options, correct_index)
 
+@tool
+def check_last_multiple_choice_answer(user_answer: str) -> str:
+    """Verifica la respuesta del usuario para la última pregunta creada"""
+    return check_last_answer_func(user_answer)
+
 
 tools = [
     read_text_file,
     search_in_text_file,
     check_multiple_choice_answer,
+    check_last_multiple_choice_answer,
     register_multiple_choice_question,
 ]
 
@@ -79,23 +86,20 @@ if __name__ == "__main__":
             "role": "user",
             "content": (
                 "Lee el archivo SD-Com.txt y crea una pregunta de opción múltiple basada en su contenido. "
-                "Registra la pregunta con 4 opciones usando la herramienta y especifica cuál es correcta. "
+                "Registra la pregunta con 4 opciones usando la herramienta sin revelar la respuesta correcta. "
                 "Devuélveme el ID de la pregunta y la lista de opciones."
             )
         }]
     })
     print(f"\nRespuesta: {result['messages'][-1].content}\n")
     
-    # Extraer el ID de la pregunta de la respuesta para el siguiente ejemplo
-    response_text = result['messages'][-1].content
-    if "ID:" in response_text:
-        question_id = response_text.split("ID: ")[1].split("\n")[0]
-        
-        print("=" * 60)
-        print("EJEMPLO 3: Verificar respuesta de opción múltiple")
-        print("=" * 60)
+    print("=" * 60)
+    print("EJEMPLO 3: Responder a la pregunta de opción múltiple")
+    print("=" * 60)
 
-        result = agent.invoke({
-            "messages": [{"role": "user", "content": f"Verifica mi respuesta para la pregunta {question_id}. Mi respuesta es 'A'"}]
-        })
-        print(f"\nRespuesta: {result['messages'][-1].content}\n")
+    user_answer_message = "La respuesta es la B para la última pregunta creada"
+    print(f"Usuario: {user_answer_message}")
+    result = agent.invoke({
+        "messages": [{"role": "user", "content": user_answer_message}]
+    })
+    print(f"\nRespuesta: {result['messages'][-1].content}\n")
