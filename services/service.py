@@ -1,5 +1,52 @@
 import os
 from typing import List, Dict, Optional
+import uuid
+from datetime import datetime
+
+
+class MCQService:
+    def __init__(self):
+        self._questions: Dict[str, Dict] = {}
+        self._answers: Dict[str, Dict] = {}
+    
+    def store_question(self, question: str, options: List[str], correct_answer: str) -> str:
+        """Almacena una pregunta de opción múltiple y retorna su ID"""
+        question_id = str(uuid.uuid4())
+        self._questions[question_id] = {
+            'question': question,
+            'options': options,
+            'correct_answer': correct_answer,
+            'created_at': datetime.now()
+        }
+        return question_id
+    
+    def get_question(self, question_id: str) -> Optional[Dict]:
+        """Obtiene una pregunta por su ID"""
+        return self._questions.get(question_id)
+    
+    def store_user_answer(self, question_id: str, user_answer: str, is_correct: bool) -> bool:
+        """Almacena la respuesta del usuario y si fue correcta"""
+        if question_id not in self._questions:
+            return False
+        
+        self._answers[question_id] = {
+            'user_answer': user_answer,
+            'is_correct': is_correct,
+            'answered_at': datetime.now()
+        }
+        return True
+    
+    def get_user_answer(self, question_id: str) -> Optional[Dict]:
+        """Obtiene la respuesta del usuario para una pregunta"""
+        return self._answers.get(question_id)
+    
+    def get_all_questions(self) -> Dict[str, Dict]:
+        """Obtiene todas las preguntas almacenadas"""
+        return self._questions.copy()
+    
+    def get_all_answers(self) -> Dict[str, Dict]:
+        """Obtiene todas las respuestas almacenadas"""
+        return self._answers.copy()
 
 
 class FileService:
