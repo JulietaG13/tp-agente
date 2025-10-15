@@ -5,6 +5,7 @@ from services.service import FileService, MCQService
 from tools.tools import check_multiple_choice_answer as check_answer_func
 from tools.tools import check_last_multiple_choice_answer as check_last_answer_func
 from tools.tools import register_multiple_choice_question as register_mcq_func
+from tools.tools import list_multiple_choice_questions as list_mcqs_func
 
 load_dotenv()
 
@@ -52,6 +53,11 @@ def check_last_multiple_choice_answer(user_answer: str) -> str:
     """Verifica la respuesta del usuario para la última pregunta creada"""
     return check_last_answer_func(user_answer)
 
+@tool
+def list_multiple_choice_questions(limit: int = 20) -> str:
+    """Lista las últimas preguntas registradas (sin revelar la respuesta correcta)"""
+    return list_mcqs_func(limit)
+
 
 tools = [
     read_text_file,
@@ -59,13 +65,14 @@ tools = [
     check_multiple_choice_answer,
     check_last_multiple_choice_answer,
     register_multiple_choice_question,
+    list_multiple_choice_questions,
 ]
 
 if __name__ == "__main__":
     agent = create_react_agent(
         model="openai:gpt-4o-mini",
         tools=tools,
-        prompt="Eres un asistente que puede leer y buscar en archivos .txt, y crear preguntas de opción múltiple. Ayuda al usuario a procesar archivos de texto y crear evaluaciones."
+        prompt="Eres un asistente que puede leer y buscar en archivos .txt, y crear preguntas de opción múltiple. Ayuda al usuario a procesar archivos de texto y crear evaluaciones. Las preguntas deben ser nuevas; comprobá las existentes y evita repetir."
     )
 
     print("=" * 60)
@@ -84,17 +91,59 @@ if __name__ == "__main__":
     result = agent.invoke({
         "messages": [{
             "role": "user",
-            "content": (
-                "Lee el archivo SD-Com.txt y crea una pregunta de opción múltiple basada en su contenido. "
-                "Registra la pregunta con 4 opciones usando la herramienta sin revelar la respuesta correcta. "
-                "Devuélveme el ID de la pregunta y la lista de opciones."
-            )
+            "content": "Lee el archivo SD-Com.txt y crea una pregunta de opción múltiple nueva basada en su contenido."
         }]
     })
     print(f"\nRespuesta: {result['messages'][-1].content}\n")
     
     print("=" * 60)
-    print("EJEMPLO 3: Responder a la pregunta de opción múltiple")
+    print("EJEMPLO 3: Responder a la pregunta de opción múltiple (1)")
+    print("=" * 60)
+
+    user_answer_message = "La respuesta es la B para la última pregunta creada"
+    print(f"Usuario: {user_answer_message}")
+    result = agent.invoke({
+        "messages": [{"role": "user", "content": user_answer_message}]
+    })
+    print(f"\nRespuesta: {result['messages'][-1].content}\n")
+
+    print("=" * 60)
+    print("EJEMPLO 4: Crear y registrar una segunda MCQ (el asistente evita repetir)")
+    print("=" * 60)
+
+    result = agent.invoke({
+        "messages": [{
+            "role": "user",
+            "content": "Crea otra pregunta de opción múltiple nueva basada en SD-Com.txt."
+        }]
+    })
+    print(f"\nRespuesta: {result['messages'][-1].content}\n")
+
+    print("=" * 60)
+    print("EJEMPLO 5: Responder a la pregunta de opción múltiple (2)")
+    print("=" * 60)
+
+    user_answer_message = "La respuesta es la B para la última pregunta creada"
+    print(f"Usuario: {user_answer_message}")
+    result = agent.invoke({
+        "messages": [{"role": "user", "content": user_answer_message}]
+    })
+    print(f"\nRespuesta: {result['messages'][-1].content}\n")
+
+    print("=" * 60)
+    print("EJEMPLO 6: Crear y registrar una tercera MCQ (el asistente evita repetir)")
+    print("=" * 60)
+
+    result = agent.invoke({
+        "messages": [{
+            "role": "user",
+            "content": "Crea una tercera pregunta de opción múltiple nueva basada en SD-Com.txt."
+        }]
+    })
+    print(f"\nRespuesta: {result['messages'][-1].content}\n")
+
+    print("=" * 60)
+    print("EJEMPLO 7: Responder a la pregunta de opción múltiple (3)")
     print("=" * 60)
 
     user_answer_message = "La respuesta es la B para la última pregunta creada"

@@ -107,6 +107,27 @@ def register_multiple_choice_question(question: str, options: list, correct_inde
     except Exception as e:
         return f"Error al registrar pregunta: {str(e)}"
 
+
+def list_multiple_choice_questions(limit: int = 20) -> str:
+    """Lista las últimas preguntas registradas (sin revelar la respuesta correcta)"""
+    try:
+        all_questions = mcq_service.get_all_questions()
+        items = list(all_questions.items())
+        items.sort(key=lambda kv: kv[1].get("created_at"))
+        if limit is not None:
+            items = items[-limit:]
+        lines = []
+        for qid, data in items:
+            question = data.get("question", "")
+            options = data.get("options", [])
+            # Formatear sin revelar la correcta
+            lines.append(f"ID: {qid}\nPregunta: {question}\nOpciones:\n" + "\n".join(
+                [f"{chr(65+i)}) {opt}" for i, opt in enumerate(options)]
+            ))
+        return "\n\n".join(lines) if lines else "Sin preguntas registradas"
+    except Exception as e:
+        return f"Error al listar preguntas: {str(e)}"
+
 TOOLS_SCHEMA = [
     {
         "type": "function",
@@ -176,6 +197,23 @@ TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
+            "name": "list_multiple_choice_questions",
+            "description": "Lista las últimas preguntas registradas (sin revelar la respuesta correcta)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {
+                        "type": "integer",
+                        "description": "Cantidad máxima a listar",
+                        "default": 20
+                    }
+                }
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "check_last_multiple_choice_answer",
             "description": "Verifica si la respuesta del usuario es correcta para la última pregunta creada",
             "parameters": {
@@ -227,5 +265,6 @@ TOOLS_MAP = {
     "search_in_text_file": search_in_text_file,
     "check_multiple_choice_answer": check_multiple_choice_answer,
     "check_last_multiple_choice_answer": check_last_multiple_choice_answer,
-    "register_multiple_choice_question": register_multiple_choice_question
+    "register_multiple_choice_question": register_multiple_choice_question,
+    "list_multiple_choice_questions": list_multiple_choice_questions
 }
