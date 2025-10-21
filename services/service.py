@@ -53,6 +53,66 @@ class MCQService:
         if not self._questions:
             return None
         return max(self._questions.items(), key=lambda item: item[1].get('created_at'))[0]
+    
+    def compute_user_score(self) -> Dict:
+        """Calcula el puntaje y métricas de rendimiento del usuario"""
+        total_questions = len(self._answers)
+        if total_questions == 0:
+            return {
+                'total_questions': 0,
+                'correct_count': 0,
+                'incorrect_count': 0,
+                'score_percentage': 0.0,
+                'recent_performance': []
+            }
+        
+        correct_count = sum(1 for ans in self._answers.values() if ans['is_correct'])
+        incorrect_count = total_questions - correct_count
+        score_percentage = (correct_count / total_questions) * 100
+        
+        # Obtener las últimas 5 respuestas
+        sorted_answers = sorted(
+            self._answers.items(),
+            key=lambda x: x[1]['answered_at']
+        )
+        recent_answers = sorted_answers[-5:]
+        recent_performance = [
+            {
+                'question_id': qid,
+                'is_correct': ans['is_correct'],
+                'answered_at': ans['answered_at']
+            }
+            for qid, ans in recent_answers
+        ]
+        
+        return {
+            'total_questions': total_questions,
+            'correct_count': correct_count,
+            'incorrect_count': incorrect_count,
+            'score_percentage': score_percentage,
+            'recent_performance': recent_performance
+        }
+    
+    def get_answer_history(self) -> List[Dict]:
+        """Retorna historial cronológico de respuestas"""
+        sorted_answers = sorted(
+            self._answers.items(),
+            key=lambda x: x[1]['answered_at']
+        )
+        
+        history = []
+        for qid, ans in sorted_answers:
+            question_data = self._questions.get(qid, {})
+            history.append({
+                'question_id': qid,
+                'question': question_data.get('question', ''),
+                'user_answer': ans['user_answer'],
+                'correct_answer': question_data.get('correct_answer', ''),
+                'is_correct': ans['is_correct'],
+                'answered_at': ans['answered_at']
+            })
+        
+        return history
 
 
 class FileService:
