@@ -173,10 +173,10 @@ The system uses a shared `AgentState` that includes:
 Make sure you have a `.env` file with:
 
 ```
-OPENAI_API_KEY=your_key_here
+ANTHROPIC_API_KEY=your_key_here
 ```
 
-The system uses `gpt-4o-mini` by default for all agents.
+The system uses `claude-3-7-sonnet-20250219` (Claude 3.7 Sonnet) for all agents.
 
 ## Troubleshooting
 

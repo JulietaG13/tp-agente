@@ -1,6 +1,7 @@
 from typing import TypedDict, Annotated, Literal
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import tool
+from langchain_anthropic import ChatAnthropic
 from langgraph.graph import StateGraph, END, START
 from langgraph.prebuilt import create_react_agent
 from langgraph.graph.message import add_messages
@@ -24,6 +25,17 @@ colorama_init(autoreset=True)
 
 file_service = FileService()
 mcq_service = MCQService()
+
+
+def create_claude_model():
+    """Crea una instancia del modelo Claude 3.7 Sonnet"""
+    return ChatAnthropic(
+        model="claude-3-7-sonnet-20250219",
+        temperature=0.7,
+        max_tokens=2048,
+        timeout=None,
+        max_retries=2
+    )
 
 
 class AgentState(TypedDict):
@@ -97,22 +109,39 @@ def get_history_tool() -> str:
     return get_answer_history_detailed()
 
 
-def create_question_creator_agent():
-    """Crea el agente generador de preguntas"""
-    tools = [read_text_file_tool, search_in_text_file_tool, list_questions_tool]
-    
-    prompt = """Eres un experto creador de preguntas de opción múltiple. Tu trabajo es:
+QUESTION_CREATOR_PROMPT = """Eres un experto creador de preguntas de opción múltiple. Tu trabajo es:
 
 1. Leer el archivo SD-Com.txt y comprender su contenido
 2. Revisar las preguntas existentes para evitar repeticiones
-3. Crear una pregunta original e interesante basada en el contenido
+3. Crear una pregunta original basada en el contenido
 4. Proporcionar exactamente 4 opciones de respuesta (una correcta y tres incorrectas plausibles)
 
+NIVELES DE DIFICULTAD:
+
+**FÁCIL** (para usuarios con bajo rendimiento):
+- Conceptos fundamentales directos
+- Opciones claramente diferenciadas
+- Terminología básica
+
+**MODERADA** (para usuarios con rendimiento medio):
+- Requiere comprensión conceptual
+- Distractores razonables pero distinguibles
+- Puede incluir aplicación de conceptos
+
+**DIFÍCIL** (para usuarios con alto rendimiento):
+- Requiere análisis profundo o síntesis de múltiples conceptos
+- Escenarios complejos o casos especiales
+- Distractores muy similares que requieren distinción sutil
+- Puede requerir comparación entre conceptos relacionados
+
 IMPORTANTE:
+- AJUSTA la dificultad según el feedback del revisor
+- Si recibes feedback de "hacer más difícil", crea preguntas que requieran pensamiento crítico
+- Si recibes feedback de "hacer más fácil", simplifica los conceptos
+- Las opciones incorrectas deben ser plausibles para el nivel de dificultad requerido
 - NO registres la pregunta todavía, solo devuélvela en formato JSON
-- Asegúrate de que las opciones incorrectas sean realistas pero claramente distintas de la correcta
-- La pregunta debe ser clara y específica
-- Devuelve tu respuesta en este formato JSON exacto:
+
+Devuelve tu respuesta en este formato JSON exacto:
 {
     "question": "texto de la pregunta",
     "options": ["opción A", "opción B", "opción C", "opción D"],
@@ -120,50 +149,65 @@ IMPORTANTE:
 }
 
 Donde correct_index es 0-3 indicando cuál opción es la correcta."""
+
+
+def create_question_creator_agent():
+    """Crea el agente generador de preguntas"""
+    tools = [read_text_file_tool, search_in_text_file_tool, list_questions_tool]
+    llm = create_claude_model()
     
     return create_react_agent(
-        model="openai:gpt-4o-mini",
-        tools=tools,
-        state_modifier=prompt
+        llm,
+        tools
     )
+
+
+DIFFICULTY_REVIEWER_PROMPT = """Eres un experto revisor de dificultad de preguntas. Tu trabajo es asegurar que las preguntas se adapten al nivel del usuario.
+
+1. PRIMERO: Revisa el rendimiento actual del usuario usando la herramienta get_performance_tool
+2. SEGUNDO: Analiza la pregunta propuesta
+3. TERCERO: Determina si la dificultad es apropiada
+
+CRITERIOS ESTRICTOS (basados en las últimas 5 respuestas):
+- Si las últimas 3-5 respuestas son correctas (60-100% reciente): RECHAZA preguntas básicas/simples. EXIGE preguntas que:
+  * Requieran análisis profundo o aplicación de múltiples conceptos
+  * Incluyan escenarios complejos o casos especiales
+  * Tengan distractores muy similares que requieran distinción sutil
+  
+- Si el rendimiento es mixto (40-60% reciente): Acepta preguntas de dificultad moderada que:
+  * Requieran comprensión conceptual sólida
+  * Tengan distractores razonables
+  
+- Si el rendimiento es bajo (<40% reciente): Acepta preguntas más directas que:
+  * Se centren en conceptos fundamentales
+  * Tengan opciones claramente diferenciadas
+  
+- Si no hay historial (0 respuestas): Acepta preguntas de dificultad moderada-baja
+
+IMPORTANTE: 
+- SÉ ESTRICTO con usuarios de alto rendimiento - no aceptes preguntas fáciles
+- Mira el rendimiento RECIENTE, no solo el porcentaje total
+- Si el usuario está mejorando, aumenta la dificultad progresivamente
+
+Devuelve tu respuesta en este formato JSON exacto:
+{
+    "approved": true/false,
+    "feedback": "explicación detallada incluyendo el análisis del rendimiento del usuario y por qué la pregunta es/no es apropiada"
+}"""
 
 
 def create_difficulty_reviewer_agent():
     """Crea el agente revisor de dificultad"""
     tools = [get_performance_tool]
-    
-    prompt = """Eres un experto revisor de dificultad de preguntas. Tu trabajo es:
-
-1. Revisar el rendimiento actual del usuario
-2. Analizar la pregunta propuesta
-3. Determinar si la dificultad es apropiada según el puntaje del usuario
-
-CRITERIOS:
-- Si el usuario tiene >75% de aciertos: la pregunta debe ser desafiante
-- Si el usuario tiene 50-75% de aciertos: la pregunta debe ser de dificultad moderada
-- Si el usuario tiene <50% de aciertos: la pregunta debe ser más accesible
-- Si no hay historial: acepta preguntas de dificultad moderada
-
-NO SEAS DEMASIADO EXIGENTE, pero tampoco demasiado permisivo. El objetivo es mantener al usuario comprometido.
-
-Devuelve tu respuesta en este formato JSON exacto:
-{
-    "approved": true/false,
-    "feedback": "explicación detallada de por qué apruebas o rechazas la pregunta y qué ajustes sugieres"
-}"""
+    llm = create_claude_model()
     
     return create_react_agent(
-        model="openai:gpt-4o-mini",
-        tools=tools,
-        state_modifier=prompt
+        llm,
+        tools
     )
 
 
-def create_feedback_agent():
-    """Crea el agente de retroalimentación"""
-    tools = [get_performance_tool, get_history_tool]
-    
-    prompt = """Eres un experto en análisis de patrones de aprendizaje. Tu trabajo es:
+FEEDBACK_AGENT_PROMPT = """Eres un experto en análisis de patrones de aprendizaje. Tu trabajo es:
 
 1. Analizar el historial de respuestas del usuario
 2. Identificar patrones, fortalezas y debilidades
@@ -176,19 +220,20 @@ Devuelve insights útiles sobre:
 - Aspectos pedagógicos a considerar
 
 Sé constructivo y específico."""
+
+
+def create_feedback_agent():
+    """Crea el agente de retroalimentación"""
+    tools = [get_performance_tool, get_history_tool]
+    llm = create_claude_model()
     
     return create_react_agent(
-        model="openai:gpt-4o-mini",
-        tools=tools,
-        state_modifier=prompt
+        llm,
+        tools
     )
 
 
-def create_orchestrator_agent():
-    """Crea el agente orquestador"""
-    tools = [get_performance_tool]
-    
-    prompt = """Eres el orquestador principal del sistema de generación de preguntas. Tu trabajo es:
+ORCHESTRATOR_PROMPT = """Eres el orquestador principal del sistema de generación de preguntas. Tu trabajo es:
 
 1. Recibir solicitudes del usuario
 2. Coordinar a los agentes especializados según sea necesario
@@ -203,11 +248,16 @@ RESPONSABILIDADES:
 - Comunícate claramente con el usuario
 
 IMPORTANTE: Tú coordinas pero NO creas preguntas directamente. Delega en los agentes especializados."""
+
+
+def create_orchestrator_agent():
+    """Crea el agente orquestador"""
+    tools = [get_performance_tool]
+    llm = create_claude_model()
     
     return create_react_agent(
-        model="openai:gpt-4o-mini",
-        tools=tools,
-        state_modifier=prompt
+        llm,
+        tools
     )
 
 
@@ -226,7 +276,7 @@ def question_creator_node(state: AgentState):
     
     message = f"Crea una nueva pregunta de opción múltiple basada en SD-Com.txt.{context}"
     
-    result = agent.invoke({"messages": [HumanMessage(content=message)]})
+    result = agent.invoke({"messages": [SystemMessage(content=QUESTION_CREATOR_PROMPT), HumanMessage(content=message)]})
     response_content = result["messages"][-1].content
     
     log_question_creator(f"Respuesta recibida: {response_content[:200]}...")
@@ -270,7 +320,16 @@ def difficulty_reviewer_node(state: AgentState):
     
     agent = create_difficulty_reviewer_agent()
     
+    score_data = mcq_service.compute_user_score()
+    recent_correct = sum(1 for p in score_data['recent_performance'] if p['is_correct'])
+    recent_total = len(score_data['recent_performance'])
+    
+    if recent_total > 0:
+        log_difficulty_reviewer(f"Rendimiento del usuario: {recent_correct}/{recent_total} correctas recientes ({score_data['score_percentage']:.1f}% total)")
+    
     question_info = f"""
+PRIMERO: Usa get_performance_tool para obtener el rendimiento detallado del usuario.
+
 Pregunta propuesta: {state['current_question']}
 
 Opciones:
@@ -280,11 +339,16 @@ C) {state['question_options'][2]}
 D) {state['question_options'][3]}
 
 Respuesta correcta: {chr(65 + state['question_correct_index'])}
+
+Contexto rápido: El usuario ha respondido {score_data['total_questions']} preguntas totales. 
+Rendimiento reciente: {recent_correct}/{recent_total} correctas en las últimas respuestas.
+
+INSTRUCCIÓN: Analiza si esta pregunta es apropiadamente desafiante para el nivel actual del usuario.
 """
     
     message = f"Revisa la siguiente pregunta y determina si la dificultad es apropiada:\n\n{question_info}"
     
-    result = agent.invoke({"messages": [HumanMessage(content=message)]})
+    result = agent.invoke({"messages": [SystemMessage(content=DIFFICULTY_REVIEWER_PROMPT), HumanMessage(content=message)]})
     response_content = result["messages"][-1].content
     
     log_difficulty_reviewer(f"Análisis recibido: {response_content[:200]}...")
@@ -328,6 +392,7 @@ Respuesta correcta: {chr(65 + state['question_correct_index'])}
                     "next_action": "present_question"
                 }
             else:
+                log_difficulty_reviewer(f"⚠️  Pregunta rechazada - Intento {iteration}/3. Solicitando ajuste de dificultad...")
                 return {
                     "question_approved": False,
                     "difficulty_feedback": feedback,
@@ -363,7 +428,7 @@ def feedback_agent_node(state: AgentState):
     
     message = "Analiza el rendimiento del usuario e identifica patrones, fortalezas y áreas de mejora."
     
-    result = agent.invoke({"messages": [HumanMessage(content=message)]})
+    result = agent.invoke({"messages": [SystemMessage(content=FEEDBACK_AGENT_PROMPT), HumanMessage(content=message)]})
     response_content = result["messages"][-1].content
     
     log_feedback_agent(f"Análisis: {response_content[:200]}...")
@@ -507,16 +572,24 @@ def main():
     log_separator()
     
     app = build_workflow()
+    waiting_for_answer = False
     
     print("\nComandos disponibles:")
     print("  - 'pregunta' / 'nueva pregunta': Genera una nueva pregunta")
     print("  - 'rendimiento' / 'puntaje': Muestra tu rendimiento actual")
+    print("  - 'A', 'B', 'C', 'D': Responde la pregunta actual")
     print("  - 'salir' / 'exit': Termina el programa")
     print()
     
     while True:
         log_separator()
-        user_input = input(f"{Fore.BLUE}👤 Tu mensaje: {Style.RESET_ALL}").strip()
+        
+        if waiting_for_answer:
+            prompt_text = f"{Fore.YELLOW}💭 Tu respuesta (A/B/C/D): {Style.RESET_ALL}"
+        else:
+            prompt_text = f"{Fore.BLUE}👤 Tu mensaje: {Style.RESET_ALL}"
+        
+        user_input = input(prompt_text).strip()
         
         if not user_input:
             continue
@@ -528,12 +601,25 @@ def main():
         log_user_input(user_input)
         log_separator()
         
+        # Check if user is answering a question
         if user_input.lower().startswith(('a)', 'b)', 'c)', 'd)')) or \
            (len(user_input) == 1 and user_input.upper() in 'ABCD'):
             result_msg = check_last_multiple_choice_answer(user_input)
-            log_user_output("\n" + result_msg)
+            log_separator()
+            log_user_output("\n" + result_msg + "\n")
+            log_separator()
+            
+            # Show current performance after answer
+            score_data = mcq_service.compute_user_score()
+            if score_data['total_questions'] > 0:
+                print(f"\n{Fore.CYAN}📊 Score actual: {score_data['score_percentage']:.1f}% " + 
+                      f"({score_data['correct_count']}/{score_data['total_questions']} correctas){Style.RESET_ALL}\n")
+            
+            waiting_for_answer = False
+            print(f"{Fore.GREEN}✅ Respuesta registrada. Puedes pedir otra pregunta o ver tu rendimiento.{Style.RESET_ALL}\n")
             continue
         
+        # Process other commands
         initial_state = {
             "messages": [HumanMessage(content=user_input)],
             "current_question": "",
@@ -549,6 +635,10 @@ def main():
         
         try:
             result = app.invoke(initial_state)
+            # Check if a question was just presented
+            if result.get("current_question"):
+                waiting_for_answer = True
+                print(f"\n{Fore.YELLOW}⏳ Esperando tu respuesta...{Style.RESET_ALL}\n")
         except Exception as e:
             log_user_output(f"Error en el sistema: {str(e)}")
             continue
