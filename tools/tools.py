@@ -128,6 +128,53 @@ def list_multiple_choice_questions(limit: int = 20) -> str:
     except Exception as e:
         return f"Error al listar preguntas: {str(e)}"
 
+
+def get_user_performance() -> str:
+    """Obtiene el rendimiento y puntaje actual del usuario"""
+    try:
+        score_data = mcq_service.compute_user_score()
+        
+        if score_data['total_questions'] == 0:
+            return "No hay respuestas registradas todavía. El usuario no ha respondido ninguna pregunta."
+        
+        result = f"=== RENDIMIENTO DEL USUARIO ===\n\n"
+        result += f"Total de preguntas respondidas: {score_data['total_questions']}\n"
+        result += f"Respuestas correctas: {score_data['correct_count']}\n"
+        result += f"Respuestas incorrectas: {score_data['incorrect_count']}\n"
+        result += f"Porcentaje de aciertos: {score_data['score_percentage']:.1f}%\n\n"
+        
+        if score_data['recent_performance']:
+            result += "Rendimiento reciente (últimas 5 respuestas):\n"
+            for i, perf in enumerate(score_data['recent_performance'], 1):
+                status = "✓ CORRECTO" if perf['is_correct'] else "✗ INCORRECTO"
+                result += f"  {i}. {status}\n"
+        
+        return result
+    except Exception as e:
+        return f"Error al obtener rendimiento: {str(e)}"
+
+
+def get_answer_history_detailed() -> str:
+    """Obtiene el historial detallado de respuestas del usuario"""
+    try:
+        history = mcq_service.get_answer_history()
+        
+        if not history:
+            return "No hay historial de respuestas todavía."
+        
+        result = f"=== HISTORIAL DE RESPUESTAS ({len(history)} preguntas) ===\n\n"
+        
+        for i, entry in enumerate(history, 1):
+            result += f"--- Pregunta {i} ---\n"
+            result += f"Pregunta: {entry['question']}\n"
+            result += f"Respuesta del usuario: {entry['user_answer']}\n"
+            result += f"Respuesta correcta: {entry['correct_answer']}\n"
+            result += f"Resultado: {'✓ CORRECTO' if entry['is_correct'] else '✗ INCORRECTO'}\n\n"
+        
+        return result
+    except Exception as e:
+        return f"Error al obtener historial: {str(e)}"
+
 TOOLS_SCHEMA = [
     {
         "type": "function",
