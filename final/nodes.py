@@ -4,13 +4,11 @@ import json
 import re
 from typing import Literal
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from tools.tools import register_multiple_choice_question, get_user_performance, mcq_service
 from final.models import AgentState, QuestionOutput, DifficultyReviewOutput
 from final.agents import (
     create_question_creator_agent,
     create_difficulty_reviewer_agent,
     create_feedback_agent,
-    create_orchestrator_agent
 )
 from final.logs import (
     log_question_creator,
@@ -24,9 +22,17 @@ from final.prompts import (
     QUESTION_CREATOR_PROMPT,
     DIFFICULTY_REVIEWER_PROMPT,
     FEEDBACK_AGENT_PROMPT,
-    ORCHESTRATOR_PROMPT
 )
+from final.agent_tools import create_agent_tools
+from tools.tools import ToolSet, _default_tools
 
+def get_toolset_from_state(state: AgentState) -> ToolSet:
+    """Extracts ToolSet from state or returns default."""
+    return state.get("toolset", _default_tools)
+
+def get_tools_for_agent(state: AgentState):
+    ts = get_toolset_from_state(state)
+    return create_agent_tools(ts)
 
 def extract_json_from_response(content: str) -> dict:
     """Extracts JSON from LLM response string."""
@@ -58,7 +64,11 @@ def extract_json_from_response(content: str) -> dict:
 def question_creator_node(state: AgentState):
     """Executes Question Creator agent."""
     log_question_creator("Iniciando creación de pregunta...")
-    agent = create_question_creator_agent()
+    
+    tools = get_tools_for_agent(state)
+    creator_tools = [t for t in tools if t.name in ["read_text_file", "search_in_text_file", "list_questions_tool"]]
+    
+    agent = create_question_creator_agent(creator_tools)
     context = ""
     if state.get("difficulty_feedback"):
         context = f"\n\nFeedback del revisor de dificultad: {state['difficulty_feedback']}"
@@ -103,8 +113,14 @@ def question_creator_node(state: AgentState):
 def difficulty_reviewer_node(state: AgentState):
     """Executes Difficulty Reviewer agent."""
     log_difficulty_reviewer("Revisando dificultad de la pregunta propuesta...")
-    agent = create_difficulty_reviewer_agent()
-    score_data = mcq_service.compute_user_score()
+    
+    ts = get_toolset_from_state(state)
+    tools = get_tools_for_agent(state)
+    reviewer_tools = [t for t in tools if t.name == "get_performance_tool"]
+    
+    agent = create_difficulty_reviewer_agent(reviewer_tools)
+    
+    score_data = ts.mcq_service.compute_user_score()
     recent_correct = sum(1 for p in score_data['recent_performance'] if p['is_correct'])
     recent_total = len(score_data['recent_performance'])
 
@@ -114,7 +130,6 @@ def difficulty_reviewer_node(state: AgentState):
             f"({score_data['score_percentage']:.1f}% total)"
         )
 
-    # Build question info for review
     question_info = f"""
 PRIMERO: Usa get_performance_tool para obtener el rendimiento detallado del usuario.
 
@@ -200,7 +215,8 @@ def feedback_agent_node(state: AgentState):
     """Executes Feedback Agent."""
     log_feedback_agent("Analizando patrones de aprendizaje del usuario...")
 
-    score_data = mcq_service.compute_user_score()
+    ts = get_toolset_from_state(state)
+    score_data = ts.mcq_service.compute_user_score()
 
     if score_data['total_questions'] < 3:
         log_feedback_agent("Historial insuficiente, omitiendo análisis detallado")
@@ -210,7 +226,9 @@ def feedback_agent_node(state: AgentState):
             "next_action": "create_question"
         }
 
-    agent = create_feedback_agent()
+    tools = get_tools_for_agent(state)
+    feedback_tools = [t for t in tools if t.name in ["get_performance_tool", "get_history_tool"]]
+    agent = create_feedback_agent(feedback_tools)
 
     message = "Analiza el rendimiento del usuario e identifica patrones, fortalezas y áreas de mejora."
 
@@ -237,14 +255,15 @@ def orchestrator_node(state: AgentState):
 
     last_message = state["messages"][-1]
     user_request = last_message.content.lower()
-
-    score_data = mcq_service.compute_user_score()
+    
+    ts = get_toolset_from_state(state)
+    score_data = ts.mcq_service.compute_user_score()
+    
     log_orchestrator(
         f"Score actual: {score_data['score_percentage']:.1f}% "
         f"({score_data['correct_count']}/{score_data['total_questions']})"
     )
 
-    # Route based on user request
     if "pregunta" in user_request or "question" in user_request or "nueva" in user_request:
         log_orchestrator("Solicitud de nueva pregunta detectada")
 
@@ -257,7 +276,7 @@ def orchestrator_node(state: AgentState):
 
     elif "rendimiento" in user_request or "puntaje" in user_request or "score" in user_request:
         log_orchestrator("Solicitud de rendimiento detectada")
-        performance = get_user_performance()
+        performance = ts.get_user_performance()
         log_user_output(performance)
         return {"next_action": "end", "messages": [AIMessage(content=performance)]}
 
@@ -269,8 +288,9 @@ def orchestrator_node(state: AgentState):
 def present_question_node(state: AgentState):
     """Presents approved question to user."""
     log_orchestrator("Pregunta aprobada, registrando y presentando al usuario...")
-
-    question_id = register_multiple_choice_question(
+    
+    ts = get_toolset_from_state(state)
+    question_id = ts.register_multiple_choice_question(
         state["current_question"],
         state["question_options"],
         state["question_correct_index"]
