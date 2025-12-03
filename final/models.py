@@ -1,6 +1,6 @@
 """Data models for multi-agent system."""
 
-from typing import TypedDict, Annotated, Any
+from typing import TypedDict, Annotated
 from pydantic import BaseModel, Field
 from langgraph.graph.message import add_messages
 
@@ -30,4 +30,3 @@ class AgentState(TypedDict):
     iteration_count: int
     question_approved: bool
     next_action: str
-    toolset: Any # Added for dependency injection (ToolSet)

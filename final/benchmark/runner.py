@@ -1,5 +1,6 @@
 import time
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
+from unittest.mock import MagicMock, patch
 
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage
@@ -18,7 +19,6 @@ from final.nodes import (
 )
 from final.benchmark.simulated_student import SimulatedStudent
 from final.benchmark.evaluator import BenchmarkEvaluator
-from tools.tools import ToolSet, MCQService, FileService
 
 class BenchmarkRunner:
     def __init__(self, student: SimulatedStudent, turns: int = 10):
@@ -26,6 +26,11 @@ class BenchmarkRunner:
         self.turns = turns
         self.evaluator = BenchmarkEvaluator()
         self.results: List[Dict[str, Any]] = []
+        
+        # We need a custom graph for benchmarking that mimics the real one
+        # but intercepts the "end" state to loop back if needed,
+        # or we just run the graph per turn.
+        # Running per turn is safer to control the loop and injection.
         self.workflow = self._build_workflow()
         
     def _build_workflow(self):
@@ -78,43 +83,55 @@ class BenchmarkRunner:
         """Runs the benchmark and returns a markdown report."""
         print(f"Starting benchmark for persona: {self.student.persona.__class__.__name__} with {self.turns} turns.")
         
-        mcq_service, toolset = self._initialize_isolated_environment()
-        state = self._create_initial_state(toolset)
+        with patch('final.nodes.mcq_service') as mock_service:
+            self._setup_initial_mock_state(mock_service)
+            history = []
+            state = self._get_initial_state()
 
-        for turn in range(1, self.turns + 1):
-            print(f"--- Turn {turn}/{self.turns} ---")
-            
-            result_state = self.workflow.invoke(state)
-            
-            turn_metrics = self._process_turn_and_evaluate(result_state, turn)
-            
-            if turn_metrics:
-                self._record_student_answer(mcq_service, toolset, turn_metrics)
-                self.results.append(turn_metrics)
-            
-            state = self._prepare_next_turn_state(toolset)
+            for turn in range(1, self.turns + 1):
+                print(f"--- Turn {turn}/{self.turns} ---")
+                self._update_mock_service(mock_service, history)
+                
+                result = self.workflow.invoke(state)
+                turn_result = self._process_turn_result(result, turn)
+                
+                if turn_result:
+                    history.append({
+                        'is_correct': turn_result['is_correct'],
+                        'answered_at': time.time()
+                    })
+                    self.results.append(turn_result)
+                
+                state = self._get_next_turn_state()
                 
         return self._generate_report()
 
-    def _initialize_isolated_environment(self):
-        """Creates a fresh service and toolset to ensure benchmark isolation."""
-        fresh_mcq_service = MCQService()
-        fresh_toolset = ToolSet(mcq_service=fresh_mcq_service)
-        return fresh_mcq_service, fresh_toolset
+    def _setup_initial_mock_state(self, mock_service):
+        mock_service.compute_user_score.return_value = {
+            'total_questions': 0,
+            'correct_count': 0,
+            'incorrect_count': 0,
+            'score_percentage': 0.0,
+            'recent_performance': []
+        }
 
-    def _create_initial_state(self, toolset: ToolSet) -> Dict:
+    def _get_initial_state(self):
         return {
             "messages": [HumanMessage(content="Quiero una pregunta nueva")],
             "iteration_count": 0,
-            "score_data": {},
-            "toolset": toolset
+            "score_data": {}
         }
 
-    def _process_turn_and_evaluate(self, result_state: Dict, turn: int) -> Optional[Dict[str, Any]]:
-        """Extracts question, evaluates difficulty, and gets student answer."""
-        question = result_state.get("current_question")
-        options = result_state.get("question_options")
-        correct_idx = result_state.get("question_correct_index")
+    def _get_next_turn_state(self):
+        return {
+            "messages": [HumanMessage(content="Dame otra pregunta")],
+            "iteration_count": 0,
+        }
+
+    def _process_turn_result(self, result: Dict, turn: int) -> Dict[str, Any]:
+        question = result.get("current_question")
+        options = result.get("question_options")
+        correct_idx = result.get("question_correct_index")
         
         if not question or not options:
             print("Error: No question generated in this turn.")
@@ -123,7 +140,9 @@ class BenchmarkRunner:
         difficulty_score = self.evaluator.evaluate_difficulty(question, options)
         student_answer_letter = self.student.answer_question(question, options)
         
-        is_correct = self._check_answer_correctness(student_answer_letter, correct_idx)
+        letter_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
+        student_idx = letter_map.get(student_answer_letter, -1)
+        is_correct = (student_idx == correct_idx)
         
         return {
             "turn": turn,
@@ -131,28 +150,30 @@ class BenchmarkRunner:
             "difficulty_score": difficulty_score,
             "is_correct": is_correct,
             "student_answer": student_answer_letter,
-            "correct_answer": chr(65 + correct_idx),
-            "options": options
+            "correct_answer": chr(65 + correct_idx)
         }
 
-    def _check_answer_correctness(self, student_answer: str, correct_idx: int) -> bool:
-        letter_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
-        student_idx = letter_map.get(student_answer, -1)
-        return student_idx == correct_idx
+    def _update_mock_service(self, mock_service, history):
+        total = len(history)
+        if total == 0:
+            return
 
-    def _record_student_answer(self, mcq_service: MCQService, toolset: ToolSet, turn_metrics: Dict):
-        """Registers the simulated student's answer in the service to update history."""
-        # The 'present_question_node' returns the ID, but we can reliably get the last created ID
-        last_id = mcq_service.get_last_question_id()
-        if last_id:
-             toolset.check_multiple_choice_answer(last_id, turn_metrics['student_answer'])
-
-    def _prepare_next_turn_state(self, toolset: ToolSet) -> Dict:
-        return {
-            "messages": [HumanMessage(content="Dame otra pregunta")],
-            "iteration_count": 0,
-            "toolset": toolset
+        correct = sum(1 for h in history if h['is_correct'])
+        incorrect = total - correct
+        percentage = (correct / total) * 100 if total > 0 else 0
+        
+        # Recent (last 5)
+        recent = history[-5:]
+        
+        mock_service.compute_user_score.return_value = {
+            'total_questions': total,
+            'correct_count': correct,
+            'incorrect_count': incorrect,
+            'score_percentage': percentage,
+            'recent_performance': recent
         }
+        
+        mock_service.get_last_question_id.return_value = "mock_id"
 
     def _generate_report(self) -> str:
         persona_name = self.student.persona.__class__.__name__
@@ -176,3 +197,4 @@ class BenchmarkRunner:
             report += f"| {r['turn']} | {r['difficulty_score']} | {status} | {r['correct_answer']} |\n"
             
         return report
+
