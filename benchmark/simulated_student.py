@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List
 import re
 from langchain_core.messages import HumanMessage, SystemMessage
-from final.agents import create_claude_model
+from final.agents import create_model
 
 class PersonaStrategy(ABC):
     """Abstract base class for student personas."""
@@ -44,8 +44,8 @@ Persona: LEARNER. You start with low knowledge but learn from feedback (simulate
 
 class SimulatedStudent:
     def __init__(self, persona: PersonaStrategy):
+        self.llm = create_model()
         self.persona = persona
-        self.llm = create_claude_model()
         self.turn_count = 0
         
     def answer_question(self, question: str, options: List[str]) -> str:

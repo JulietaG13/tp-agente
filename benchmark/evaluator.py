@@ -1,11 +1,11 @@
 from typing import List
 from langchain_core.messages import HumanMessage, SystemMessage
-from final.agents import create_claude_model
+from final.agents import create_model
 import re
 
 class BenchmarkEvaluator:
     def __init__(self):
-        self.llm = create_claude_model()
+        self.llm = create_model()
 
     def evaluate_difficulty(self, question: str, options: List[str]) -> int:
         """

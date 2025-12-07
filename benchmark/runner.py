@@ -1,6 +1,7 @@
 import time
 from typing import Dict, List, Any
 from unittest.mock import MagicMock, patch
+from tqdm import tqdm
 
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage
@@ -17,13 +18,14 @@ from final.nodes import (
     route_after_question_creation,
     route_after_difficulty_review
 )
-from final.benchmark.simulated_student import SimulatedStudent
-from final.benchmark.evaluator import BenchmarkEvaluator
+from benchmark.simulated_student import SimulatedStudent
+from benchmark.evaluator import BenchmarkEvaluator
 
 class BenchmarkRunner:
-    def __init__(self, student: SimulatedStudent, turns: int = 10):
+    def __init__(self, student: SimulatedStudent, turns: int = 10, sleep_duration: float = 0):
         self.student = student
         self.turns = turns
+        self.sleep_duration = sleep_duration
         self.evaluator = BenchmarkEvaluator()
         self.results: List[Dict[str, Any]] = []
         
@@ -63,7 +65,10 @@ class BenchmarkRunner:
         workflow.add_conditional_edges(
             "create_question",
             route_after_question_creation,
-            {"review_difficulty": "review_difficulty"}
+            {
+                "review_difficulty": "review_difficulty",
+                "create_question": "create_question"
+            }
         )
 
         workflow.add_conditional_edges(
@@ -83,28 +88,51 @@ class BenchmarkRunner:
         """Runs the benchmark and returns a markdown report."""
         print(f"Starting benchmark for persona: {self.student.persona.__class__.__name__} with {self.turns} turns.")
         
-        with patch('final.nodes.mcq_service') as mock_service:
-            self._setup_initial_mock_state(mock_service)
-            history = []
-            state = self._get_initial_state()
-
-            for turn in range(1, self.turns + 1):
-                print(f"--- Turn {turn}/{self.turns} ---")
-                self._update_mock_service(mock_service, history)
-                
-                result = self.workflow.invoke(state)
-                turn_result = self._process_turn_result(result, turn)
-                
-                if turn_result:
-                    history.append({
-                        'is_correct': turn_result['is_correct'],
-                        'answered_at': time.time()
-                    })
-                    self.results.append(turn_result)
-                
-                state = self._get_next_turn_state()
+        # We need to patch the service in both locations:
+        # 1. tools.tools.mcq_service: used by the actual Tools (get_performance_tool, etc)
+        # 2. final.nodes.mcq_service: used by the Agent Nodes to build context
+        with patch('tools.tools.mcq_service') as mock_service:
+            with patch('final.nodes.mcq_service', new=mock_service):
+                self._run_benchmark_loop(mock_service)
                 
         return self._generate_report()
+
+    def _run_benchmark_loop(self, mock_service):
+        self._setup_initial_mock_state(mock_service)
+        history = []
+        state = self._get_initial_state()
+
+        for turn in range(1, self.turns + 1):
+            print(f"--- Turn {turn}/{self.turns} ---")
+            
+            state, success = self._execute_single_turn(turn, state, history, mock_service)
+            if not success:
+                break
+
+    def _execute_single_turn(self, turn: int, state: Dict, history: List, mock_service) -> tuple[Dict, bool]:
+        self._update_mock_service(mock_service, history)
+        
+        try:
+            result = self.workflow.invoke(state)
+            turn_result = self._process_turn_result(result, turn)
+            
+            if turn_result:
+                history.append({
+                    'is_correct': turn_result['is_correct'],
+                    'answered_at': time.time()
+                })
+                self.results.append(turn_result)
+            
+            next_state = self._get_next_turn_state()
+            
+            if self.sleep_duration > 0 and turn < self.turns:
+                self._sleep_with_progress(turn)
+                
+            return next_state, True
+            
+        except Exception as e:
+            print(f"Error in turn {turn}: {e}")
+            return state, False
 
     def _setup_initial_mock_state(self, mock_service):
         mock_service.compute_user_score.return_value = {
@@ -147,6 +175,7 @@ class BenchmarkRunner:
         return {
             "turn": turn,
             "question": question,
+            "options": options,
             "difficulty_score": difficulty_score,
             "is_correct": is_correct,
             "student_answer": student_answer_letter,
@@ -175,26 +204,95 @@ class BenchmarkRunner:
         
         mock_service.get_last_question_id.return_value = "mock_id"
 
-    def _generate_report(self) -> str:
-        persona_name = self.student.persona.__class__.__name__
-        report = f"# Benchmark Report: {persona_name}\n\n"
-        report += f"**Date**: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        report += f"**Total Turns**: {self.turns}\n\n"
+    def _sleep_with_progress(self, current_turn: int):
+        """Sleep between turns with progress indicator."""
+        print(f"\n⏳ Rate limit protection: Waiting {self.sleep_duration}s before next turn...")
         
+        for _ in tqdm(range(int(self.sleep_duration * 10)), desc="Sleeping", unit="0.1s", ncols=80):
+            time.sleep(0.1)
+        
+        print()
+
+    def _generate_report(self) -> str:
+        sections = [
+            self._generate_report_header(),
+            self._generate_summary_section(),
+            self._generate_adaptivity_table(),
+            self._generate_detailed_logs()
+        ]
+        return "\n".join(sections)
+
+    def _generate_report_header(self) -> str:
+        persona_name = self.student.persona.__class__.__name__
+        return (
+            f"# Benchmark Report: {persona_name}\n\n"
+            f"**Date**: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"**Total Turns**: {self.turns}\n"
+        )
+
+    def _generate_summary_section(self) -> str:
         total_correct = sum(1 for r in self.results if r['is_correct'])
         accuracy = (total_correct / self.turns) * 100 if self.turns > 0 else 0
+        avg_difficulty = sum(r['difficulty_score'] for r in self.results) / self.turns if self.turns > 0 else 0
         
-        report += f"## Summary\n"
-        report += f"- **Accuracy**: {accuracy:.2f}%\n"
-        report += f"- **Average Difficulty**: {sum(r['difficulty_score'] for r in self.results) / self.turns:.2f}\n\n"
+        return (
+            f"## Summary\n"
+            f"- **Accuracy**: {accuracy:.2f}%\n"
+            f"- **Average Difficulty**: {avg_difficulty:.2f}\n"
+        )
+
+    def _generate_adaptivity_table(self) -> str:
+        header = (
+            "## Adaptivity Analysis\n"
+            "| Turn | Difficulty (1-5) | Result | Correct Answer |\n"
+            "|---|---|---|---|\n"
+        )
         
-        report += "## Adaptivity Analysis\n"
-        report += "| Turn | Difficulty (1-5) | Result | Correct Answer |\n"
-        report += "|---|---|---|---|\n"
-        
+        rows = []
         for r in self.results:
             status = "✅ Correct" if r['is_correct'] else "❌ Incorrect"
-            report += f"| {r['turn']} | {r['difficulty_score']} | {status} | {r['correct_answer']} |\n"
+            rows.append(f"| {r['turn']} | {r['difficulty_score']} | {status} | {r['correct_answer']} |")
             
-        return report
+        return header + "\n".join(rows) + "\n"
+
+    def _generate_detailed_logs(self) -> str:
+        logs = ["## Detailed Question Log"]
+        for r in self.results:
+            logs.append(self._format_single_turn_log(r))
+        return "\n".join(logs)
+
+    def _format_single_turn_log(self, result: Dict) -> str:
+        status_icon = "✅" if result['is_correct'] else "❌"
+        
+        log_parts = [
+            f"### Turn {result['turn']} {status_icon}",
+            f"**Question**: {result['question']}\n",
+            "**Options**:"
+        ]
+        
+        for i, opt in enumerate(result['options']):
+            log_parts.append(self._format_option_line(i, opt, result))
+            
+        log_parts.append(f"\n**Difficulty**: {result['difficulty_score']}/5")
+        log_parts.append("---\n")
+        
+        return "\n".join(log_parts)
+
+    def _format_option_line(self, index: int, option_text: str, result: Dict) -> str:
+        letter = chr(65 + index)
+        is_correct = (letter == result['correct_answer'])
+        is_selected = (letter == result['student_answer'])
+        
+        suffix_parts = []
+        if is_correct:
+            suffix_parts.append("(Correct Answer)")
+        if is_selected:
+            suffix_parts.append("(Student Choice)")
+            
+        suffix = " " + " ".join(suffix_parts) if suffix_parts else ""
+        line = f"{letter}) {option_text}{suffix}"
+        
+        if is_selected:
+            return f"- **{line}**"
+        return f"- {line}"
 

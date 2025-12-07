@@ -296,7 +296,9 @@ def route_after_feedback(state: AgentState) -> Literal["create_question"]:
     return "create_question"
 
 
-def route_after_question_creation(state: AgentState) -> Literal["review_difficulty"]:
+def route_after_question_creation(state: AgentState) -> Literal["review_difficulty", "create_question"]:
+    if state.get("next_action") == "create_question":
+        return "create_question"
     return "review_difficulty"
 
 
