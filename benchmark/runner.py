@@ -20,6 +20,8 @@ from final.nodes import (
 )
 from benchmark.simulated_student import SimulatedStudent
 from benchmark.evaluator import BenchmarkEvaluator
+from benchmark.metrics import BenchmarkMetrics
+from benchmark.report_generator import BenchmarkReportGenerator
 
 class BenchmarkRunner:
     def __init__(self, student: SimulatedStudent, turns: int = 10, sleep_duration: float = 0):
@@ -214,85 +216,22 @@ class BenchmarkRunner:
         print()
 
     def _generate_report(self) -> str:
-        sections = [
-            self._generate_report_header(),
-            self._generate_summary_section(),
-            self._generate_adaptivity_table(),
-            self._generate_detailed_logs()
+        """Generate markdown report using metrics and report generator."""
+        turns_data = self._prepare_turns_data()
+        persona_true_level = self.student.persona.true_level
+        
+        metrics = BenchmarkMetrics(turns_data, persona_true_level)
+        generator = BenchmarkReportGenerator()
+        
+        return generator.generate_report(self.results, self.student.persona, metrics)
+
+    def _prepare_turns_data(self) -> List[Dict[str, Any]]:
+        """Extract turns data for metrics calculation."""
+        return [
+            {
+                'difficulty_score': r['difficulty_score'],
+                'is_correct': r['is_correct']
+            }
+            for r in self.results
         ]
-        return "\n".join(sections)
-
-    def _generate_report_header(self) -> str:
-        persona_name = self.student.persona.__class__.__name__
-        return (
-            f"# Benchmark Report: {persona_name}\n\n"
-            f"**Date**: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-            f"**Total Turns**: {self.turns}\n"
-        )
-
-    def _generate_summary_section(self) -> str:
-        total_correct = sum(1 for r in self.results if r['is_correct'])
-        accuracy = (total_correct / self.turns) * 100 if self.turns > 0 else 0
-        avg_difficulty = sum(r['difficulty_score'] for r in self.results) / self.turns if self.turns > 0 else 0
-        
-        return (
-            f"## Summary\n"
-            f"- **Accuracy**: {accuracy:.2f}%\n"
-            f"- **Average Difficulty**: {avg_difficulty:.2f}\n"
-        )
-
-    def _generate_adaptivity_table(self) -> str:
-        header = (
-            "## Adaptivity Analysis\n"
-            "| Turn | Difficulty (1-5) | Result | Correct Answer |\n"
-            "|---|---|---|---|\n"
-        )
-        
-        rows = []
-        for r in self.results:
-            status = "✅ Correct" if r['is_correct'] else "❌ Incorrect"
-            rows.append(f"| {r['turn']} | {r['difficulty_score']} | {status} | {r['correct_answer']} |")
-            
-        return header + "\n".join(rows) + "\n"
-
-    def _generate_detailed_logs(self) -> str:
-        logs = ["## Detailed Question Log"]
-        for r in self.results:
-            logs.append(self._format_single_turn_log(r))
-        return "\n".join(logs)
-
-    def _format_single_turn_log(self, result: Dict) -> str:
-        status_icon = "✅" if result['is_correct'] else "❌"
-        
-        log_parts = [
-            f"### Turn {result['turn']} {status_icon}",
-            f"**Question**: {result['question']}\n",
-            "**Options**:"
-        ]
-        
-        for i, opt in enumerate(result['options']):
-            log_parts.append(self._format_option_line(i, opt, result))
-            
-        log_parts.append(f"\n**Difficulty**: {result['difficulty_score']}/5")
-        log_parts.append("---\n")
-        
-        return "\n".join(log_parts)
-
-    def _format_option_line(self, index: int, option_text: str, result: Dict) -> str:
-        letter = chr(65 + index)
-        is_correct = (letter == result['correct_answer'])
-        is_selected = (letter == result['student_answer'])
-        
-        suffix_parts = []
-        if is_correct:
-            suffix_parts.append("(Correct Answer)")
-        if is_selected:
-            suffix_parts.append("(Student Choice)")
-            
-        suffix = " " + " ".join(suffix_parts) if suffix_parts else ""
-        line = f"{letter}) {option_text}{suffix}"
-        
-        if is_selected:
-            return f"- **{line}**"
-        return f"- {line}"
 

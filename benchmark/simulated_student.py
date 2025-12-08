@@ -7,11 +7,41 @@ from final.agents import create_model
 class PersonaStrategy(ABC):
     """Abstract base class for student personas."""
     
+    @property
+    @abstractmethod
+    def true_level(self) -> float:
+        """Returns the expected difficulty level for this persona (1.0-5.0)."""
+        pass
+    
+    @property
+    @abstractmethod
+    def target_sensitivity(self) -> float:
+        """Returns the ideal error sensitivity for this persona (0.0-1.0)."""
+        pass
+    
+    @property
+    @abstractmethod
+    def target_accuracy(self) -> float:
+        """Returns the expected accuracy for this persona (0.0-1.0)."""
+        pass
+    
     @abstractmethod
     def get_system_prompt(self, turn_count: int) -> str:
         pass
 
 class ExpertPersona(PersonaStrategy):
+    @property
+    def true_level(self) -> float:
+        return 5.0
+    
+    @property
+    def target_sensitivity(self) -> float:
+        return 0.3
+    
+    @property
+    def target_accuracy(self) -> float:
+        return 0.75
+    
     def get_system_prompt(self, turn_count: int) -> str:
         return """You are a simulated student taking a multiple choice test.
 Your goal is to answer the question based strictly on your persona.
@@ -20,6 +50,18 @@ Return ONLY the letter of the option you choose (A, B, C, or D).
 Persona: EXPERT. You are highly knowledgeable in the subject. You rarely make mistakes (95% accuracy). You are confident and critical of ambiguous questions."""
 
 class NovicePersona(PersonaStrategy):
+    @property
+    def true_level(self) -> float:
+        return 1.5
+    
+    @property
+    def target_sensitivity(self) -> float:
+        return 0.8
+    
+    @property
+    def target_accuracy(self) -> float:
+        return 0.65
+    
     def get_system_prompt(self, turn_count: int) -> str:
         return """You are a simulated student taking a multiple choice test.
 Your goal is to answer the question based strictly on your persona.
@@ -28,6 +70,18 @@ Return ONLY the letter of the option you choose (A, B, C, or D).
 Persona: NOVICE. You have little knowledge of the subject. You often guess randomly or fall for distractors. You are easily confused."""
 
 class LearnerPersona(PersonaStrategy):
+    @property
+    def true_level(self) -> float:
+        return 3.0
+    
+    @property
+    def target_sensitivity(self) -> float:
+        return 0.6
+    
+    @property
+    def target_accuracy(self) -> float:
+        return 0.70
+    
     def get_system_prompt(self, turn_count: int) -> str:
         base = """You are a simulated student taking a multiple choice test.
 Your goal is to answer the question based strictly on your persona.
