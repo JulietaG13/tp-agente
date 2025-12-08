@@ -75,6 +75,9 @@ def main():
     args = parse_arguments()
     output_path = determine_output_path(args.output)
     
+    benchmark_dir = os.path.dirname(os.path.abspath(__file__))
+    os.environ["CONTENT_PATH"] = os.path.join(benchmark_dir, "content", "SD-Com.txt")
+    
     print(f"Initializing benchmark for {args.persona} with {args.turns} turns...")
     
     persona = create_persona_from_name(args.persona)

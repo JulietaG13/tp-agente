@@ -22,6 +22,8 @@ from benchmark.simulated_student import SimulatedStudent
 from benchmark.evaluator import BenchmarkEvaluator
 from benchmark.metrics import BenchmarkMetrics
 from benchmark.report_generator import BenchmarkReportGenerator
+from benchmark.topic_labeler import TopicLabeler, SubtopicLoader
+from benchmark.coverage_metrics import TopicHistoryBuilder, CoverageMetricsCalculator
 
 class BenchmarkRunner:
     def __init__(self, student: SimulatedStudent, turns: int = 10, sleep_duration: float = 0):
@@ -29,6 +31,7 @@ class BenchmarkRunner:
         self.turns = turns
         self.sleep_duration = sleep_duration
         self.evaluator = BenchmarkEvaluator()
+        self.topic_labeler = TopicLabeler()
         self.results: List[Dict[str, Any]] = []
         
         # We need a custom graph for benchmarking that mimics the real one
@@ -168,6 +171,7 @@ class BenchmarkRunner:
             return None
         
         difficulty_score = self.evaluator.evaluate_difficulty(question, options)
+        subtopic_ids = self.topic_labeler.label_question(question, options)
         student_answer_letter = self.student.answer_question(question, options)
         
         letter_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
@@ -179,6 +183,7 @@ class BenchmarkRunner:
             "question": question,
             "options": options,
             "difficulty_score": difficulty_score,
+            "subtopics": subtopic_ids,
             "is_correct": is_correct,
             "student_answer": student_answer_letter,
             "correct_answer": chr(65 + correct_idx)
@@ -218,12 +223,17 @@ class BenchmarkRunner:
     def _generate_report(self) -> str:
         """Generate markdown report using metrics and report generator."""
         turns_data = self._prepare_turns_data()
-        persona_true_level = self.student.persona.true_level
         
-        metrics = BenchmarkMetrics(turns_data, persona_true_level)
+        adaptivity_metrics = self._compute_adaptivity_metrics(turns_data)
+        coverage_metrics = self._compute_coverage_metrics()
+        
         generator = BenchmarkReportGenerator()
-        
-        return generator.generate_report(self.results, self.student.persona, metrics)
+        return generator.generate_report(
+            self.results, 
+            self.student.persona, 
+            adaptivity_metrics,
+            coverage_metrics
+        )
 
     def _prepare_turns_data(self) -> List[Dict[str, Any]]:
         """Extract turns data for metrics calculation."""
@@ -234,4 +244,20 @@ class BenchmarkRunner:
             }
             for r in self.results
         ]
+    
+    def _compute_adaptivity_metrics(self, turns_data: List[Dict[str, Any]]) -> BenchmarkMetrics:
+        """Compute adaptivity-focused metrics for contextual validation."""
+        persona_true_level = self.student.persona.true_level
+        return BenchmarkMetrics(turns_data, persona_true_level)
+    
+    def _compute_coverage_metrics(self) -> CoverageMetricsCalculator:
+        """Compute topic coverage metrics for objective evaluation."""
+        builder = TopicHistoryBuilder()
+        topic_history = builder.build_history(self.results)
+        
+        subtopics = SubtopicLoader().load_subtopics()
+        total_topics = len(subtopics)
+        total_turns = len(self.results)
+        
+        return CoverageMetricsCalculator(topic_history, total_topics, total_turns)
 
