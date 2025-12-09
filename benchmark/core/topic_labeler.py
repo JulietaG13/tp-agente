@@ -13,6 +13,7 @@ class SubtopicLoader:
         """Load subtopics from JSON file."""
         subtopics_path = os.path.join(
             os.path.dirname(__file__), 
+            "..",
             "content", 
             "subtopics.json"
         )
@@ -50,7 +51,19 @@ Options:
 {formatted_options}
 
 Return ONLY a comma-separated list of the subtopic indices (numbers) that are covered in this question.
-For example: "0,5,12" or "3" or "7,15,20"
+If no topics are covered, return an empty string. Do NOT try to force elements into the list. If there are no topics, then return an empty string.
+For example: "0,5" or "3" or "7,15" or "".
+
+You must ONLY include the topics that are central to the question.
+Here are some guidelines to help you:
+1. Analyze the question to identify which syllabus topics are absolutely necessary to answer it correctly.
+2. Apply the "Necessity Test": If a student does not understand Topic X, is it impossible for them to reason out the correct answer? If yes, Topic X is Primary.
+3. EXCLUDE the following:
+   - Concepts mentioned only in the scenario/background text (Context).
+   - Concepts mentioned only in incorrect options (Distractors).
+   - Broad categories (e.g., if the question is about "Kafka", do not tag "Middleware").
+4. SORT your list by relevance (most critical topic first).
+5. LIMIT your output to the TOP 2 topics only.
 
 Response:"""
     
@@ -67,5 +80,8 @@ Response:"""
     def _parse_subtopic_indices(self, response: str) -> List[int]:
         numbers = re.findall(r'\d+', response)
         indices = [int(n) for n in numbers if 0 <= int(n) < len(self.subtopics)]
-        return sorted(list(set(indices)))
+        # Deduplicate preserving order to respect relevance
+        unique_indices = list(dict.fromkeys(indices))
+        # Hard cap at 2 topics
+        return sorted(unique_indices[:2])
 

@@ -1,6 +1,6 @@
-from benchmark.coverage_metrics import CoverageMetricsCalculator
-from benchmark.metrics import BenchmarkMetrics
-from benchmark.score_calculator import FinalScoreCalculator
+from benchmark.metrics.coverage_metrics import CoverageMetricsCalculator
+from benchmark.metrics.metrics import BenchmarkMetrics
+from benchmark.metrics.score_calculator import FinalScoreCalculator
 
 
 class ObjectiveMetricsSection:
@@ -31,20 +31,25 @@ class ObjectiveMetricsSection:
             f"**Grade**: {interpretation}\n\n"
             "---\n\n"
             "### Component Metrics:\n\n"
-            f"#### 1. Effective Curriculum Coverage (ECC)\n"
-            f"**Value**: {ecc:.2%}\n"
+            f"#### 1. Effective Curriculum Coverage (ECC)\n\n"
+            f"_Measures the breadth of student mastery across the curriculum._\n\n"
+            f"**Value**: {ecc:.2%}\n\n"
             f"**Interpretation**: {self._interpret_ecc(ecc)}\n\n"
-            f"#### 2. Syllabus Exposure\n"
-            f"**Value**: {exposure:.2%}\n"
+            f"#### 2. Syllabus Exposure\n\n"
+            f"_Measures the breadth of content presented by the system._\n\n"
+            f"**Value**: {exposure:.2%}\n\n"
             f"**Interpretation**: {self._interpret_exposure(exposure)}\n\n"
-            f"#### 3. Remediation Efficiency\n"
-            f"**Value**: {remediation:.2%}\n"
+            f"#### 3. Remediation Efficiency\n\n"
+            f"_Measures how effectively the system supports recovery from failures._\n\n"
+            f"**Value**: {remediation:.2%}\n\n"
             f"**Interpretation**: {self._interpret_remediation(remediation)}\n\n"
-            f"#### 4. Error Sensitivity\n"
-            f"**Value**: {sensitivity:.2f}\n"
+            f"#### 4. Error Sensitivity\n\n"
+            f"_Measures how consistently the system adapts difficulty after errors._\n\n"
+            f"**Value**: {sensitivity:.2f}\n\n"
             f"**Interpretation**: {self._interpret_sensitivity(sensitivity)}\n\n"
-            f"#### 5. Difficulty-Weighted Proficiency\n"
-            f"**Value**: {proficiency:.2%}\n"
+            f"#### 5. Difficulty-Weighted Proficiency\n\n"
+            f"_Measures student performance weighted by question difficulty._\n\n"
+            f"**Value**: {proficiency:.2%}\n\n"
             f"**Interpretation**: {self._interpret_proficiency(proficiency)}\n"
         )
     
@@ -94,12 +99,18 @@ class ObjectiveMetricsSection:
     
     def _interpret_proficiency(self, proficiency: float) -> str:
         """Interpret Difficulty-Weighted Proficiency value."""
-        if proficiency >= 0.75:
-            return "✅ Excellent performance relative to question difficulty"
-        elif proficiency >= 0.60:
-            return "✓ Good performance considering difficulty levels"
-        elif proficiency >= 0.45:
-            return "⚠ Fair performance relative to difficulty"
-        else:
-            return "❌ Poor performance even accounting for difficulty"
+        if 0.65 <= proficiency <= 0.85:
+            return "✅ Optimal Challenge (Sweet Spot) - Student is learning effectively"
+            
+        # Upper Boundary violations (Too Easy)
+        if proficiency > 0.85:
+            if proficiency <= 0.95:
+                return "⚠ Under-challenged - Questions may be too easy relative to student level"
+            return "❌ Poor - System failing to challenge (Too Easy)"
+            
+        # Lower Boundary violations (Too Hard)
+        if proficiency < 0.65:
+            if proficiency >= 0.50:
+                return "⚠ Over-challenged - Student is struggling slightly"
+            return "❌ Poor - System failing to support (Too Hard)"
 

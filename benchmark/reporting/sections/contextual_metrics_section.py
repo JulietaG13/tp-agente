@@ -1,5 +1,5 @@
-from benchmark.metrics import BenchmarkMetrics
-from benchmark.simulated_student import PersonaStrategy
+from benchmark.metrics.metrics import BenchmarkMetrics
+from benchmark.core.simulated_student import PersonaStrategy
 
 
 class ContextualMetricsSection:
@@ -15,12 +15,14 @@ class ContextualMetricsSection:
             "*These metrics validate that the simulated persona behaved as expected.*\n\n"
             "---\n\n"
             "### Component Metrics:\n\n"
-            "#### 1. EMA Convergence Error\n"
-            f"**Value**: {ema_error}\n"
-            f"**Target Level**: {persona.true_level}\n"
+            "#### 1. EMA Convergence Error\n\n"
+            "_Measures how accurately the system's difficulty estimate matches the user's true level._\n\n"
+            f"**Value**: {ema_error}\n\n"
+            f"**Target Level**: {persona.true_level}\n\n"
             f"**Interpretation**: {self._interpret_ema_error(ema_error)}\n\n"
-            "#### 2. Calibration Offset\n"
-            f"**Value**: {offset:+.2f}\n"
+            "#### 2. Calibration Offset\n\n"
+            "_Measures the average gap between question difficulty and user ability._\n\n"
+            f"**Value**: {offset:+.2f}\n\n"
             f"**Interpretation**: {self._interpret_offset(offset)}\n"
         )
     

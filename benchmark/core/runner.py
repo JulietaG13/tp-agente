@@ -18,12 +18,9 @@ from final.nodes import (
     route_after_question_creation,
     route_after_difficulty_review
 )
-from benchmark.simulated_student import SimulatedStudent
-from benchmark.evaluator import BenchmarkEvaluator
-from benchmark.metrics import BenchmarkMetrics
-from benchmark.report_generator import BenchmarkReportGenerator
-from benchmark.topic_labeler import TopicLabeler, SubtopicLoader
-from benchmark.coverage_metrics import TopicHistoryBuilder, CoverageMetricsCalculator
+from benchmark.core.simulated_student import SimulatedStudent
+from benchmark.core.evaluator import BenchmarkEvaluator
+from benchmark.core.topic_labeler import TopicLabeler
 
 class BenchmarkRunner:
     def __init__(self, student: SimulatedStudent, turns: int = 10, sleep_duration: float = 0):
@@ -89,8 +86,8 @@ class BenchmarkRunner:
         
         return workflow.compile()
 
-    def run(self) -> str:
-        """Runs the benchmark and returns a markdown report."""
+    def run(self) -> Dict:
+        """Runs the benchmark and returns raw results data."""
         print(f"Starting benchmark for persona: {self.student.persona.__class__.__name__} with {self.turns} turns.")
         
         # We need to patch the service in both locations:
@@ -100,7 +97,7 @@ class BenchmarkRunner:
             with patch('final.nodes.mcq_service', new=mock_service):
                 self._run_benchmark_loop(mock_service)
                 
-        return self._generate_report()
+        return self._prepare_raw_results()
 
     def _run_benchmark_loop(self, mock_service):
         self._setup_initial_mock_state(mock_service)
@@ -220,44 +217,20 @@ class BenchmarkRunner:
         
         print()
 
-    def _generate_report(self) -> str:
-        """Generate markdown report using metrics and report generator."""
-        turns_data = self._prepare_turns_data()
-        
-        adaptivity_metrics = self._compute_adaptivity_metrics(turns_data)
-        coverage_metrics = self._compute_coverage_metrics()
-        
-        generator = BenchmarkReportGenerator()
-        return generator.generate_report(
-            self.results, 
-            self.student.persona, 
-            adaptivity_metrics,
-            coverage_metrics
-        )
-
-    def _prepare_turns_data(self) -> List[Dict[str, Any]]:
-        """Extract turns data for metrics calculation."""
-        return [
-            {
-                'difficulty_score': r['difficulty_score'],
-                'is_correct': r['is_correct']
-            }
-            for r in self.results
-        ]
-    
-    def _compute_adaptivity_metrics(self, turns_data: List[Dict[str, Any]]) -> BenchmarkMetrics:
-        """Compute adaptivity-focused metrics for contextual validation."""
-        persona_true_level = self.student.persona.true_level
-        return BenchmarkMetrics(turns_data, persona_true_level)
-    
-    def _compute_coverage_metrics(self) -> CoverageMetricsCalculator:
-        """Compute topic coverage metrics for objective evaluation."""
-        builder = TopicHistoryBuilder()
-        topic_history = builder.build_history(self.results)
-        
-        subtopics = SubtopicLoader().load_subtopics()
-        total_topics = len(subtopics)
-        total_turns = len(self.results)
-        
-        return CoverageMetricsCalculator(topic_history, total_topics, total_turns)
+    def _prepare_raw_results(self) -> Dict:
+        """Prepare raw results for serialization."""
+        return {
+            'metadata': {
+                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+                'turns_planned': self.turns,
+                'turns_completed': len(self.results),
+                'persona_type': self.student.persona.__class__.__name__
+            },
+            'persona_config': {
+                'true_level': self.student.persona.true_level,
+                'target_sensitivity': self.student.persona.target_sensitivity,
+                'target_accuracy': self.student.persona.target_accuracy
+            },
+            'results': self.results
+        }
 

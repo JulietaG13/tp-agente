@@ -40,9 +40,9 @@ class CoverageMetricsCalculator:
     def _calculate_expected_coverage_capacity(self) -> int:
         """
         Calculate expected topic coverage capacity.
-        Assumption: A session can cover topics equal to 80% of turns.
+        Assumption: A session can cover topics twice the number of turns (at most 2 topics per turn).
         """
-        expected = math.ceil(self.total_turns * 0.8)
+        expected = math.ceil(self.total_turns * 2)
         return min(self.total_topics, expected)
 
     def calculate_syllabus_exposure(self) -> float:

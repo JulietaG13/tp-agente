@@ -1,12 +1,12 @@
 import time
 from typing import List, Dict, Any
-from benchmark.metrics import BenchmarkMetrics
-from benchmark.coverage_metrics import CoverageMetricsCalculator
-from benchmark.simulated_student import PersonaStrategy
-from benchmark.report_sections.objective_metrics_section import ObjectiveMetricsSection
-from benchmark.report_sections.contextual_metrics_section import ContextualMetricsSection
-from benchmark.report_sections.coverage_matrix_section import CoverageMatrixSection
-from benchmark.topic_labeler import SubtopicLoader
+from benchmark.metrics.metrics import BenchmarkMetrics
+from benchmark.metrics.coverage_metrics import CoverageMetricsCalculator
+from benchmark.core.simulated_student import PersonaStrategy
+from benchmark.reporting.sections.objective_metrics_section import ObjectiveMetricsSection
+from benchmark.reporting.sections.contextual_metrics_section import ContextualMetricsSection
+from benchmark.reporting.sections.coverage_matrix_section import CoverageMatrixSection
+from benchmark.core.topic_labeler import SubtopicLoader
 
 
 class BenchmarkReportGenerator:

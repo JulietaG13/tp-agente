@@ -1,3 +1,6 @@
+import math
+
+
 class FinalScoreCalculator:
     """Calculates weighted final benchmark score from objective metrics."""
     
@@ -27,10 +30,16 @@ class FinalScoreCalculator:
         Returns:
             Final score as percentage (0-100)
         """
+        # Calculate proficiency score using a Gaussian bell curve
+        # Target = 0.75 (Sweet spot)
+        # Sigma = 0.2 (Controls width: score ~0.5 at +/- 0.25 deviation)
+        sigma = 0.2
+        proficiency_score = math.exp(-((proficiency - 0.75) ** 2) / (2 * sigma ** 2))
+
         weighted_sum = (
             self.WEIGHTS['effective_coverage'] * ecc +
             self.WEIGHTS['remediation_efficiency'] * remediation +
-            self.WEIGHTS['proficiency'] * proficiency +
+            self.WEIGHTS['proficiency'] * proficiency_score +
             self.WEIGHTS['error_sensitivity'] * sensitivity
         )
         
