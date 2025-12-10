@@ -1,6 +1,6 @@
 # Benchmark Report: NovicePersona
 
-**Date**: 2025-12-09 18:26:22
+**Date**: 2025-12-09 20:16:14
 **Total Turns**: 15
 
 ## Summary
@@ -54,7 +54,7 @@ _Measures student performance weighted by question difficulty._
 
 **Value**: 60.00%
 
-**Interpretation**: ⚠ Over-challenged - Student is struggling significantly
+**Interpretation**: ⚠ Over-challenged - Student is struggling slightly
 
 ## Topic Coverage Matrix
 
@@ -130,13 +130,17 @@ _Measures student performance weighted by question difficulty._
 
 #### 1. EMA Convergence Error
 
-_Measures how accurately the system's difficulty estimate matches the user's true level._
+_Measures if the Persona Agent actually behaved as the difficulty level we configured it to be._
 
-**Value**: 1.798
+_Explanation: When we configure a 'Novice' persona (Level 1.5), we expect it to struggle with hard questions. If the system estimates its level as 4.0, it means the persona answered too many hard questions correctly. This metric checks if the Persona validates its own configuration._
 
-**Target Level**: 1.5
+**System Estimate (EMA)**: 3.298
 
-**Interpretation**: ❌ Poor - System failed to converge or ended far from target
+**Target Level**: 1.500
+
+**Convergence Error**: 1.798
+
+**Interpretation**: ❗ Divergence - Persona behaving significantly different from target level
 
 #### 2. Calibration Offset
 
@@ -144,7 +148,7 @@ _Measures the average gap between question difficulty and user ability._
 
 **Value**: +1.83
 
-**Interpretation**: ⚠ Over-challenging by 1.83 - Questions too hard
+**Interpretation**: ℹ Note: Persona finding questions harder than expected (Gap: 1.83)
 
 ## Adaptivity Analysis
 | Turn | Difficulty (1-5) | Result | Correct Answer |
