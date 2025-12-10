@@ -55,6 +55,8 @@ def extract_json_from_response(content: str) -> dict:
     raise ValueError(f"Could not extract JSON from response: {content[:200]}")
 
 
+import os
+
 def question_creator_node(state: AgentState):
     """Executes Question Creator agent."""
     log_question_creator("Iniciando creación de pregunta...")
@@ -66,7 +68,8 @@ def question_creator_node(state: AgentState):
     if state.get("user_feedback"):
         context += f"\n\nFeedback sobre el usuario: {state['user_feedback']}"
 
-    message = f"Crea una nueva pregunta de opción múltiple basada en SD-Com.txt.{context}"
+    content_path = os.environ.get("CONTENT_PATH", "SD-Com.txt")
+    message = f"Crea una nueva pregunta de opción múltiple basada en {content_path}.{context}"
 
     try:
         result = agent.invoke({
@@ -296,7 +299,9 @@ def route_after_feedback(state: AgentState) -> Literal["create_question"]:
     return "create_question"
 
 
-def route_after_question_creation(state: AgentState) -> Literal["review_difficulty"]:
+def route_after_question_creation(state: AgentState) -> Literal["review_difficulty", "create_question"]:
+    if state.get("next_action") == "create_question":
+        return "create_question"
     return "review_difficulty"
 
 
