@@ -43,10 +43,12 @@ Devuelve tu respuesta en este formato JSON exacto:
 {
     "question": "texto de la pregunta",
     "options": ["opción A", "opción B", "opción C", "opción D"],
-    "correct_index": 0
+    "correct_index": 0,
+    "source_chunk_ids": ["<chunk_id_1>", "<chunk_id_2>"]
 }
 
-Donde correct_index es 0-3 indicando cuál opción es la correcta."""
+Donde correct_index es 0-3 indicando cuál opción es la correcta.
+y source_chunk_ids contiene los IDs de los fragmentos (chunks) usados para crear la pregunta."""
 
 
 QUESTION_CREATOR_PROMPT_NO_RAG = """Eres un experto creador de preguntas de opción múltiple. Tu trabajo es:

@@ -1,5 +1,6 @@
 from typing import List, Dict, Optional
 from final.rag.vector_store import ChromaVectorStore
+from final.rag.progress_view import build_chunk_progress_note
 
 
 class ContentRetriever:
@@ -28,22 +29,57 @@ class ContentRetriever:
         if not query:
             return "No se proporcionó una query válida."
 
-        results = self.vector_store.query(query, n_results=n_results)
+        buffer = 8
+        results = self.vector_store.query(query, n_results=max(n_results + buffer, n_results))
 
-        if not results['documents'][0]:
+        if not results.get('documents') or not results['documents'][0]:
             return "No se encontró contenido relevante."
 
-        # Formatear resultados
+        docs = results.get("documents", [[]])[0]
+        metadatas = results.get("metadatas", [[]])[0]
+        ids = results.get("ids", [[]])[0] or [None] * len(docs)
+
+        candidates = list(zip(ids, docs, metadatas))
+        selected = self._filter_mastered_chunks(candidates, n_results)
+
         formatted_content = []
-        for i, (doc, metadata) in enumerate(zip(
-            results['documents'][0],
-            results['metadatas'][0]
-        )):
+        for i, (chunk_id, doc, metadata) in enumerate(selected, start=1):
+            chunk_index = metadata.get("chunk_index")
+            subtopics = metadata.get("subtopics", [])
+            progress_note = build_chunk_progress_note(str(chunk_id)) if chunk_id else "chunk_status=unknown"
             formatted_content.append(
-                f"[Fragmento {i+1} - Chunk {metadata['chunk_index']}]\n{doc}\n"
+                "\n".join(
+                    [
+                        f"[Fragmento {i}]",
+                        f"chunk_id: {chunk_id}",
+                        f"chunk_index: {chunk_index}",
+                        f"subtopics: {subtopics}",
+                        f"progress: {progress_note}",
+                        f"{doc}",
+                        "",
+                    ]
+                )
             )
 
         return "\n".join(formatted_content)
+
+    def _filter_mastered_chunks(self, candidates: List[tuple], n_results: int) -> List[tuple]:
+        kept: List[tuple] = []
+        deferred: List[tuple] = []
+        for chunk_id, doc, metadata in candidates:
+            if not chunk_id:
+                kept.append((chunk_id, doc, metadata))
+                continue
+            note = build_chunk_progress_note(str(chunk_id))
+            if "chunk_status=mastered" in note:
+                deferred.append((chunk_id, doc, metadata))
+            else:
+                kept.append((chunk_id, doc, metadata))
+
+        selected = kept[:n_results]
+        if len(selected) < n_results:
+            selected.extend(deferred[: (n_results - len(selected))])
+        return selected
 
     def retrieve_for_question_creation(
         self,

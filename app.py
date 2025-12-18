@@ -19,6 +19,7 @@ async def main(message: cl.Message):
 @cl.action_callback("answer")
 @cl.action_callback("new_question")
 @cl.action_callback("performance")
+@cl.action_callback("use_default_file")
 async def on_action(action: cl.Action):
     await ChainlitHandler.process_action(action)
 

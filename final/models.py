@@ -17,6 +17,7 @@ class QuestionOutput(BaseModel):
     question: str = Field(description="Question text")
     options: list[str] = Field(description="4 answer options")
     correct_index: int = Field(description="Correct answer index (0-3)", ge=0, le=3)
+    source_chunk_ids: list[str] = Field(description="Chunk IDs used to build the question", default_factory=list)
 
 
 class OpenEndedQuestionOutput(BaseModel):

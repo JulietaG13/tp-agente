@@ -73,6 +73,8 @@ def extract_json_from_response(content: str) -> dict:
 
 
 import os
+from final.rag.session_context import get_rag_context
+from final.rag.progress_view import build_subtopic_focus_brief
 
 def question_creator_node(state: AgentState):
     """Executes Question Creator agent."""
@@ -90,7 +92,15 @@ def question_creator_node(state: AgentState):
 
     if use_rag:
         prompt = QUESTION_CREATOR_PROMPT
-        message = f"Crea una nueva pregunta de opción múltiple basada en el material del curso (usa RAG tools).{context}"
+        rag_ctx = get_rag_context()
+        focus_brief = build_subtopic_focus_brief(list(rag_ctx.subtopics)) if rag_ctx.subtopics else "SUBTOPIC_FOCUS:\n- (no_subtopics_available)"
+        message = (
+            "Crea una nueva pregunta de opción múltiple basada en el material del curso (usa RAG tools).\n\n"
+            f"{focus_brief}\n\n"
+            "INSTRUCCIÓN: Elige un subtopic prioritario de la lista y usa RAG tools para recuperar chunks relevantes. "
+            "Evita chunks con guidance=avoid_reusing_if_possible, salvo que sea necesario.\n"
+            f"{context}"
+        )
     else:
         from final.prompts import QUESTION_CREATOR_PROMPT_NO_RAG
         prompt = QUESTION_CREATOR_PROMPT_NO_RAG
@@ -122,6 +132,7 @@ def question_creator_node(state: AgentState):
             "current_question": validated.question,
             "question_options": validated.options,
             "question_correct_index": validated.correct_index,
+            "source_chunk_ids": getattr(validated, "source_chunk_ids", []),
             "messages": [AIMessage(content=f"Pregunta propuesta: {validated.question}")],
             "next_action": "review_difficulty"
         }
@@ -564,7 +575,8 @@ def present_question_node(state: AgentState):
         question_id = register_multiple_choice_question(
             state["current_question"],
             state["question_options"],
-            state["question_correct_index"]
+            state["question_correct_index"],
+            source_chunk_ids=state.get("source_chunk_ids", []),
         )
 
     log_separator()

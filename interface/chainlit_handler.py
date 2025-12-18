@@ -1,5 +1,11 @@
 import chainlit as cl
-from services.service_manager import initialize_session_services, get_service
+import os
+import uuid
+
+from services.service import MCQService
+from services.service_manager import initialize_session_services, get_service, set_service
+from final.rag.index_pipeline import index_course_file
+from final.rag.session_context import RagContext, set_rag_context
 from final_agent import build_workflow
 from langchain_core.messages import HumanMessage
 from tools.tools import check_last_multiple_choice_answer
@@ -14,6 +20,16 @@ class ChainlitHandler:
         # Store service in user session for reference
         service = get_service()
         cl.user_session.set("mcq_service", service)
+
+        await cl.Message(
+            content="Antes de empezar, sube un archivo .txt para indexarlo (RAG). "
+                    "Si prefieres, puedes usar el archivo default."
+        ).send()
+
+        actions = [
+            cl.Action(name="use_default_file", payload={"value": "__USE_DEFAULT_FILE__"}, label="Usar archivo default")
+        ]
+        await cl.Message(content="Selecciona una opción:", actions=actions).send()
 
         app = build_workflow()
         cl.user_session.set("app", app)
@@ -30,6 +46,11 @@ class ChainlitHandler:
 
         if message.elements:
             await ChainlitHandler._handle_file_upload(message)
+            return
+
+        if user_input == "__USE_DEFAULT_FILE__":
+            await ChainlitHandler._index_default_file()
+            await cl.Message(content="✅ Archivo default indexado. Ya puedes pedir una pregunta.").send()
             return
 
         if ChainlitHandler._is_answer_attempt(user_input):
@@ -52,14 +73,69 @@ class ChainlitHandler:
     def _restore_context():
         """Restore ContextVars from session."""
         service = cl.user_session.get("mcq_service")
-        set_service(service)
+        if isinstance(service, MCQService):
+            set_service(service)
+
+        collection_name = cl.user_session.get("rag_collection_name")
+        subtopics = cl.user_session.get("rag_subtopics") or []
+        if collection_name:
+            set_rag_context(
+                RagContext(
+                    persist_directory="./chroma_db",
+                    collection_name=collection_name,
+                    subtopics=tuple(subtopics),
+                )
+            )
+
         app = cl.user_session.get("app")
         return service, app
 
     @staticmethod
     async def _handle_file_upload(message: cl.Message):
         """Handle file upload scenarios."""
-        await cl.Message(content="Recibí un archivo, pero aún no sé cómo procesarlo.").send()
+        uploaded = message.elements[0]
+        file_path = getattr(uploaded, "path", None)
+        if not file_path:
+            await cl.Message(content="No pude acceder al path del archivo subido.").send()
+            return
+
+        collection_name = f"course_content_{uuid.uuid4().hex[:8]}"
+        index_result = index_course_file(
+            file_path=file_path,
+            persist_directory="./chroma_db",
+            collection_name=collection_name,
+            force_reset=True,
+        )
+        set_rag_context(
+            RagContext(
+                persist_directory="./chroma_db",
+                collection_name=collection_name,
+                subtopics=index_result.subtopics,
+            )
+        )
+        cl.user_session.set("rag_collection_name", collection_name)
+        cl.user_session.set("rag_subtopics", list(index_result.subtopics))
+        await cl.Message(content=f"Tu archivo fue procesado con éxito.").send()
+
+    @staticmethod
+    async def _index_default_file():
+        default_path = os.environ.get("CONTENT_PATH", "SD-Com.txt")
+        collection_name = "course_content_chainlit_default"
+        index_result = index_course_file(
+            file_path=default_path,
+            persist_directory="./chroma_db",
+            collection_name=collection_name,
+            force_reset=True,
+        )
+        set_rag_context(
+            RagContext(
+                persist_directory="./chroma_db",
+                collection_name=collection_name,
+                subtopics=index_result.subtopics,
+            )
+        )
+        cl.user_session.set("rag_collection_name", collection_name)
+        cl.user_session.set("rag_subtopics", list(index_result.subtopics))
 
     @staticmethod
     def _is_answer_attempt(text: str) -> bool:

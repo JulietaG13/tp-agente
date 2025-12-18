@@ -1,22 +1,34 @@
 import os
-from typing import List, Dict, Optional
 import uuid
 from datetime import datetime
+from typing import List, Dict, Optional
 
 
 class MCQService:
     def __init__(self):
         self._questions: Dict[str, Dict] = {}
         self._answers: Dict[str, Dict] = {}
+        self._turn: int = 0
+        self._chunk_progress: Dict[str, Dict] = {}
+        self._subtopic_progress: Dict[str, Dict] = {}
     
-    def store_question(self, question: str, options: List[str], correct_answer: str) -> str:
+    def store_question(
+        self,
+        question: str,
+        options: List[str],
+        correct_answer: str,
+        source_chunk_ids: Optional[List[str]] = None,
+        source_subtopics: Optional[List[str]] = None,
+    ) -> str:
         """Almacena una pregunta de opción múltiple y retorna su ID"""
         question_id = str(uuid.uuid4())
         self._questions[question_id] = {
             'question': question,
             'options': options,
             'correct_answer': correct_answer,
-            'created_at': datetime.now()
+            'created_at': datetime.now(),
+            'source_chunk_ids': list(source_chunk_ids or []),
+            'source_subtopics': list(source_subtopics or []),
         }
         return question_id
     
@@ -29,11 +41,14 @@ class MCQService:
         if question_id not in self._questions:
             return False
         
+        self._turn += 1
         self._answers[question_id] = {
             'user_answer': user_answer,
             'is_correct': is_correct,
-            'answered_at': datetime.now()
+            'answered_at': datetime.now(),
+            'turn': self._turn,
         }
+        self._update_learning_progress(question_id=question_id, is_correct=is_correct, turn=self._turn)
         return True
     
     def get_user_answer(self, question_id: str) -> Optional[Dict]:
@@ -53,6 +68,19 @@ class MCQService:
         if not self._questions:
             return None
         return max(self._questions.items(), key=lambda item: item[1].get('created_at'))[0]
+
+    def get_chunk_progress(self, chunk_id: str) -> Dict:
+        return self._chunk_progress.get(chunk_id, self._empty_progress())
+
+    def get_subtopic_progress(self, subtopic: str) -> Dict:
+        key = self._normalize_key(subtopic)
+        return self._subtopic_progress.get(key, self._empty_progress(name=subtopic))
+
+    def list_chunk_progress(self) -> Dict[str, Dict]:
+        return {k: v.copy() for k, v in self._chunk_progress.items()}
+
+    def list_subtopic_progress(self) -> Dict[str, Dict]:
+        return {k: v.copy() for k, v in self._subtopic_progress.items()}
     
     def compute_user_score(self) -> Dict:
         """Calcula el puntaje y métricas de rendimiento del usuario"""
@@ -79,8 +107,10 @@ class MCQService:
         recent_performance = [
             {
                 'question_id': qid,
+                'question': self._questions.get(qid, {}).get('question', ''),
                 'is_correct': ans['is_correct'],
-                'answered_at': ans['answered_at']
+                'answered_at': ans['answered_at'],
+                'turn': ans.get('turn'),
             }
             for qid, ans in recent_answers
         ]
@@ -113,6 +143,44 @@ class MCQService:
             })
         
         return history
+
+    def _update_learning_progress(self, question_id: str, is_correct: bool, turn: int) -> None:
+        q = self._questions.get(question_id, {})
+        chunk_ids = q.get("source_chunk_ids") or []
+        subtopics = q.get("source_subtopics") or []
+        for chunk_id in chunk_ids:
+            self._record_progress(self._chunk_progress, key=chunk_id, is_correct=is_correct, turn=turn)
+        for subtopic in subtopics:
+            self._record_progress(self._subtopic_progress, key=self._normalize_key(subtopic), is_correct=is_correct, turn=turn, name=subtopic)
+
+    def _record_progress(self, store: Dict[str, Dict], key: str, is_correct: bool, turn: int, name: Optional[str] = None) -> None:
+        entry = store.get(key)
+        if entry is None:
+            entry = self._empty_progress(name=name)
+            store[key] = entry
+
+        entry["attempts"] += 1
+        entry["last_seen_turn"] = turn
+        if is_correct:
+            entry["correct"] += 1
+            entry["last_correct_turn"] = turn
+        else:
+            entry["incorrect"] += 1
+            entry["last_incorrect_turn"] = turn
+
+    def _empty_progress(self, name: Optional[str] = None) -> Dict:
+        return {
+            "name": name,
+            "attempts": 0,
+            "correct": 0,
+            "incorrect": 0,
+            "last_seen_turn": None,
+            "last_correct_turn": None,
+            "last_incorrect_turn": None,
+        }
+
+    def _normalize_key(self, value: str) -> str:
+        return " ".join(str(value).strip().split()).casefold()
 
 
 class FileService:

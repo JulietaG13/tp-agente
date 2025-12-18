@@ -8,22 +8,19 @@ from tools.tools import (
     get_unified_performance
 )
 from services.service_manager import get_service
-
-# Initialize RAG components
-_vector_store = None
-_retriever = None
+from final.rag.session_context import get_rag_context
 
 def get_rag_components():
-    global _vector_store, _retriever
+    from final.rag.vector_store import ChromaVectorStore
+    from final.rag.retriever import ContentRetriever
 
-    if _vector_store is None:
-        from final.rag.vector_store import ChromaVectorStore
-        from final.rag.retriever import ContentRetriever
-
-        _vector_store = ChromaVectorStore()
-        _retriever = ContentRetriever(_vector_store)
-
-    return _vector_store, _retriever
+    context = get_rag_context()
+    vector_store = ChromaVectorStore(
+        persist_directory=context.persist_directory,
+        collection_name=context.collection_name,
+    )
+    retriever = ContentRetriever(vector_store)
+    return vector_store, retriever
 
 
 @tool

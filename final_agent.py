@@ -32,6 +32,8 @@ from final.nodes import (
     route_after_difficulty_review
 )
 from final.logs import log_separator, log_user_input, log_user_output
+from final.rag.index_pipeline import index_course_file
+from final.rag.session_context import RagContext, set_rag_context
 
 load_dotenv()
 colorama_init(autoreset=True)
@@ -131,6 +133,26 @@ def main():
     print(f"{Fore.CYAN}Preguntas Abiertas: {open_status}{Style.RESET_ALL}")
 
     log_separator()
+
+    if use_rag:
+        default_path = os.environ.get("CONTENT_PATH", "SD-Com.txt")
+        file_path = input(f"{Fore.BLUE}📄 Archivo para indexar (ENTER para '{default_path}'): {Style.RESET_ALL}").strip()
+        if not file_path:
+            file_path = default_path
+
+        index_result = index_course_file(
+            file_path=file_path,
+            persist_directory="./chroma_db",
+            collection_name="course_content_cli",
+            force_reset=True,
+        )
+        set_rag_context(
+            RagContext(
+                persist_directory="./chroma_db",
+                collection_name="course_content_cli",
+                subtopics=index_result.subtopics,
+            )
+        )
 
     app = build_workflow()
     evaluation_app = build_evaluation_workflow()

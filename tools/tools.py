@@ -1,9 +1,9 @@
-from services.service import FileService
-from services.service_manager import get_service, get_open_service, get_unified_performance as get_unified_perf_service
-from services.service import FileService
-from services.service_manager import get_service
 import os
 import json
+from typing import Optional
+
+from services.service import FileService
+from services.service_manager import get_service, get_open_service, get_unified_performance as get_unified_perf_service
 
 
 file_service = FileService()
@@ -79,7 +79,13 @@ def check_last_multiple_choice_answer(user_answer: str) -> str:
         return f"Error al verificar respuesta para la última pregunta: {str(e)}"
 
 
-def register_multiple_choice_question(question: str, options: list, correct_index: int) -> str:
+def register_multiple_choice_question(
+    question: str,
+    options: list,
+    correct_index: int,
+    source_chunk_ids: Optional[list] = None,
+    source_subtopics: Optional[list] = None,
+) -> str:
     """Registra una pregunta de opción múltiple con 4 opciones y la respuesta correcta por índice (0-3)."""
     try:
         if not isinstance(options, list):
@@ -100,7 +106,13 @@ def register_multiple_choice_question(question: str, options: list, correct_inde
         original_correct_answer = options[correct_index]
         correct_answer = original_correct_answer
         mcq_service = get_service()
-        question_id = mcq_service.store_question(question, shuffled_options, correct_answer)
+        question_id = mcq_service.store_question(
+            question,
+            shuffled_options,
+            correct_answer,
+            source_chunk_ids=list(source_chunk_ids or []),
+            source_subtopics=list(source_subtopics or []),
+        )
 
         result = f"Pregunta registrada con ID: {question_id}\n\n"
         result += f"Pregunta: {question}\n\n"
