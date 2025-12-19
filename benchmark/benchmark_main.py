@@ -15,6 +15,49 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from benchmark.core.simulated_student import SimulatedStudent, ExpertPersona, NovicePersona, LearnerPersona
 from benchmark.core.runner import BenchmarkRunner
 from benchmark.reporting.data_serializer import BenchmarkDataSerializer
+from final.rag.labeler_agent import ChunkSubtopicLabeler
+from final.rag.session_context import RagContext, set_rag_context, default_persist_directory
+
+
+def _chunk_words(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str]:
+    words = text.split()
+    if not words:
+        return []
+
+    chunks: list[str] = []
+    step = max(1, chunk_size - overlap)
+    for i in range(0, len(words), step):
+        chunk = " ".join(words[i : i + chunk_size]).strip()
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+
+def _select_samples(chunks: list[str], max_samples: int = 7) -> list[str]:
+    if not chunks:
+        return []
+    if len(chunks) <= max_samples:
+        return list(chunks)
+
+    picks: list[str] = [chunks[0]]
+    if len(chunks) > 2:
+        picks.append(chunks[1])
+    mid = len(chunks) // 2
+    picks.append(chunks[mid])
+    if mid + 1 < len(chunks):
+        picks.append(chunks[mid + 1])
+    if len(chunks) > 3:
+        picks.append(chunks[-2])
+    picks.append(chunks[-1])
+    return picks[:max_samples]
+
+
+def _extract_benchmark_subtopics(file_path: str) -> list[str]:
+    with open(file_path, "r", encoding="utf-8") as f:
+        raw = f.read()
+    chunks = _chunk_words(raw, chunk_size=400, overlap=50)
+    samples = _select_samples(chunks, max_samples=7)
+    return ChunkSubtopicLabeler().extract_taxonomy(samples=samples, max_subtopics=30)
 
 
 def parse_arguments():
@@ -67,6 +110,24 @@ def main():
 
     benchmark_dir = os.path.dirname(os.path.abspath(__file__))
     os.environ["CONTENT_PATH"] = os.path.join(benchmark_dir, "content", "SD-Com.txt")
+    os.environ["USE_RAG"] = os.environ.get("USE_RAG", "true")
+    os.environ["USE_OPEN_ENDED_QUESTIONS"] = os.environ.get("USE_OPEN_ENDED_QUESTIONS", "true")
+
+    content_path = os.environ["CONTENT_PATH"]
+    collection_name = os.environ.get("BENCHMARK_COLLECTION_NAME", "course_content")
+    persist_directory = os.environ.get("CHROMA_PERSIST_DIRECTORY", default_persist_directory())
+    if not os.path.isabs(persist_directory):
+        repo_root = os.path.dirname(benchmark_dir)
+        persist_directory = os.path.abspath(os.path.join(repo_root, persist_directory))
+
+    subtopics = _extract_benchmark_subtopics(content_path)
+    set_rag_context(
+        RagContext(
+            persist_directory=persist_directory,
+            collection_name=collection_name,
+            subtopics=tuple(subtopics),
+        )
+    )
     
     print(f"Initializing benchmark for {args.persona} with {args.turns} turns...")
     
