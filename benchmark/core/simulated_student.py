@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List
+import json
 import re
+from colorama import Fore, Style
 from langchain_core.messages import HumanMessage, SystemMessage
 from final.agents import create_model
 
@@ -60,7 +62,7 @@ class NovicePersona(PersonaStrategy):
     
     @property
     def target_accuracy(self) -> float:
-        return 0.65
+        return 0.78
     
     def get_system_prompt(self, turn_count: int) -> str:
         return """You are a simulated student taking a multiple choice test.
@@ -121,23 +123,85 @@ class SimulatedStudent:
         self.turn_count += 1
         
         system_prompt = self.persona.get_system_prompt(self.turn_count)
+        system_prompt = self._with_output_format(system_prompt)
         
         formatted_options = "\n".join([f"{chr(65+i)}) {opt}" for i, opt in enumerate(options)])
-        user_message = f"Question: {question}\n\nOptions:\n{formatted_options}\n\nSelect the best answer (A/B/C/D):"
+        user_message = (
+            f"Question: {question}\n\n"
+            f"Options:\n{formatted_options}\n\n"
+            "You may reason in plain text, but you MUST end your message with a single JSON object like:\n"
+            '{"answer":"A"}\n'
+            "and nothing after it."
+        )
         
+        self._log_student_input(system_prompt, user_message)
         response = self.llm.invoke([
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_message)
         ])
         
-        content = response.content.strip().upper()
-        # Extract just the letter if the LLM was verbose
-        if len(content) > 1:
-            match = re.search(r'\b([A-D])\b', content)
-            if match:
-                content = match.group(1)
-            else:
-                if content[0] in "ABCD":
-                    content = content[0]
-        
-        return content
+        raw = response.content.strip()
+        picked, method = self._extract_choice(raw)
+        self._log_student_output(raw, picked, method)
+        return picked
+
+    def _with_output_format(self, system_prompt: str) -> str:
+        return (
+            f"{system_prompt}\n\n"
+            "OUTPUT FORMAT:\n"
+            "- You may include reasoning.\n"
+            '- You MUST end your message with a single JSON object exactly like: {"answer":"A"}\n'
+            "- The JSON must be the last thing in your message (no trailing text).\n"
+            "- answer must be exactly one of: A, B, C, D."
+        )
+
+    def _extract_choice(self, raw: str) -> tuple[str, str]:
+        content = (raw or "").strip()
+        try:
+            data = self._extract_json_object(content)
+            answer = str(data.get("answer", "")).strip().upper()
+            if answer in "ABCD":
+                return answer, "json"
+        except Exception:
+            pass
+
+        # Fallback: take the LAST standalone option letter (avoids matching "Option A" early).
+        matches = re.findall(r"\b([A-D])\b", content.upper())
+        if matches:
+            return matches[-1], "fallback_last_letter"
+
+        # Final fallback: first character if it looks like a choice
+        upper = content.upper()
+        if upper and upper[0] in "ABCD":
+            return upper[0], "fallback_first_char"
+
+        return "A", "fallback_default"
+
+    def _extract_json_object(self, text: str) -> dict:
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+
+        fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if fenced:
+            return json.loads(fenced.group(1))
+
+        obj = re.search(r"\{[\s\S]*\}", text)
+        if obj:
+            return json.loads(obj.group(0))
+
+        raise ValueError("Could not parse JSON object")
+
+    def _persona_name(self) -> str:
+        return self.persona.__class__.__name__
+
+    def _log_student_input(self, system_prompt: str, user_message: str) -> None:
+        header = f"{Fore.LIGHTMAGENTA_EX}🎓 [STUDENT]{Style.RESET_ALL} persona={self._persona_name()} turn={self.turn_count}"
+        print(header)
+        print(f"{Fore.LIGHTMAGENTA_EX}🎓 [STUDENT]{Style.RESET_ALL} system_prompt:\n{system_prompt}")
+        print(f"{Fore.LIGHTMAGENTA_EX}🎓 [STUDENT]{Style.RESET_ALL} user_message:\n{user_message}")
+
+    def _log_student_output(self, raw: str, picked: str, method: str) -> None:
+        print(f"{Fore.LIGHTMAGENTA_EX}🎓 [STUDENT]{Style.RESET_ALL} raw_llm_output:\n{raw}")
+        print(f"{Fore.LIGHTMAGENTA_EX}🎓 [STUDENT]{Style.RESET_ALL} extracted_choice={picked} method={method}")

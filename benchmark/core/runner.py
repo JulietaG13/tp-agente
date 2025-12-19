@@ -1,6 +1,5 @@
 import time
 from typing import Dict, List, Any
-from unittest.mock import MagicMock, patch
 from tqdm import tqdm
 
 from langgraph.graph import StateGraph, END
@@ -18,6 +17,8 @@ from final.nodes import (
     route_after_question_creation,
     route_after_difficulty_review
 )
+from services.service_manager import initialize_session_services, get_service
+from tools.tools import check_multiple_choice_answer
 from benchmark.core.simulated_student import SimulatedStudent
 from benchmark.core.evaluator import BenchmarkEvaluator
 from benchmark.core.topic_labeler import TopicLabeler
@@ -106,47 +107,19 @@ class BenchmarkRunner:
     def run(self) -> Dict:
         """Runs the benchmark and returns raw results data."""
         print(f"Starting benchmark for persona: {self.student.persona.__class__.__name__} with {self.turns} turns.")
-
-        with patch('final.nodes.get_service') as mock_get_service, \
-             patch('final.nodes.get_open_service') as mock_get_open_service, \
-             patch('final.nodes.get_unified_perf_service') as mock_get_unified_perf:
-            mock_service = MagicMock()
-            mock_get_service.return_value = mock_service
-            mock_get_open_service.return_value = MagicMock()
-
-            mock_unified_perf_service = MagicMock()
-            mock_unified_perf_service.compute_unified_performance.return_value = {
-                'overall_percentage': 0.0,
-                'total_questions': 0,
-                'mcq_count': 0,
-                'mcq_correct': 0,
-                'mcq_percentage': 0.0,
-                'open_count': 0,
-                'open_avg_score': 0.0,
-                'open_percentage': 0.0,
-                'recent_overall_performance': []
-            }
-            mock_get_unified_perf.return_value = mock_unified_perf_service
-
-            self._run_benchmark_loop(mock_service, mock_unified_perf_service)
-
-        return self._prepare_raw_results()
-
-    def _run_benchmark_loop(self, mock_service, mock_unified_perf_service):
-        self._setup_initial_mock_state(mock_service)
-        history = []
+        initialize_session_services()
         state = self._get_initial_state()
 
         for turn in range(1, self.turns + 1):
             print(f"--- Turn {turn}/{self.turns} ---")
 
-            state, success = self._execute_single_turn(turn, state, history, mock_service, mock_unified_perf_service)
+            state, success = self._execute_single_turn(turn, state)
             if not success:
                 break
 
-    def _execute_single_turn(self, turn: int, state: Dict, history: List, mock_service, mock_unified_perf_service) -> tuple[Dict, bool]:
-        self._update_mock_service(mock_service, history, mock_unified_perf_service)
+        return self._prepare_raw_results()
 
+    def _execute_single_turn(self, turn: int, state: Dict) -> tuple[Dict, bool]:
         try:
             start_time = time.time()
             result = self.workflow.invoke(state)
@@ -155,10 +128,6 @@ class BenchmarkRunner:
             turn_result = self._process_turn_result(result, turn, generation_time)
 
             if turn_result:
-                history.append({
-                    'is_correct': turn_result['is_correct'],
-                    'answered_at': time.time()
-                })
                 self.results.append(turn_result)
             
             next_state = self._get_next_turn_state()
@@ -172,44 +141,64 @@ class BenchmarkRunner:
             print(f"Error in turn {turn}: {e}")
             return state, False
 
-    def _setup_initial_mock_state(self, mock_service):
-        mock_service.compute_user_score.return_value = {
-            'total_questions': 0,
-            'correct_count': 0,
-            'incorrect_count': 0,
-            'score_percentage': 0.0,
-            'recent_performance': []
-        }
-
     def _get_initial_state(self):
-        return {
-            "messages": [HumanMessage(content="Quiero una pregunta nueva")],
-            "iteration_count": 0,
-            "score_data": {}
-        }
+        return self._base_state("Quiero una pregunta nueva")
 
     def _get_next_turn_state(self):
+        return self._base_state("Dame otra pregunta")
+
+    def _base_state(self, user_msg: str) -> Dict:
         return {
-            "messages": [HumanMessage(content="Dame otra pregunta")],
+            "messages": [HumanMessage(content=user_msg)],
+            "question_type": "",
+            "current_question": "",
+            "question_options": [],
+            "question_correct_index": 0,
+            "open_question": "",
+            "open_evaluation_criteria": "",
+            "open_key_concepts": [],
+            "open_question_difficulty": "",
+            "difficulty_feedback": "",
+            "user_feedback": "",
+            "score_data": {},
             "iteration_count": 0,
+            "question_approved": False,
+            "next_action": "",
+            "question_type_decision": "",
+            "question_id": "",
+            "user_open_answer": "",
+            "evaluation_score": 0.0,
+            "evaluation_feedback": "",
+            "evaluation_passing": False,
         }
 
     def _process_turn_result(self, result: Dict, turn: int, generation_time: float) -> Dict[str, Any]:
-        question = result.get("current_question")
-        options = result.get("question_options")
-        correct_idx = result.get("question_correct_index")
-        
-        if not question or not options:
-            print("Error: No question generated in this turn.")
+        question_id = result.get("question_id")
+        if not question_id:
+            print("Error: No question_id generated in this turn.")
             return None
+
+        service = get_service()
+        q_data = service.get_question(question_id)
+        if not q_data:
+            print("Error: Question not found in service.")
+            return None
+
+        question = q_data.get("question")
+        options = q_data.get("options")
+        correct_answer = q_data.get("correct_answer")
+        if not question or not options:
+            print("Error: Question data incomplete.")
+            return None
+
+        correct_idx = options.index(correct_answer) if correct_answer in options else -1
         
         difficulty_score = self.evaluator.evaluate_difficulty(question, options)
         subtopic_ids = self.topic_labeler.label_question(question, options)
         student_answer_letter = self.student.answer_question(question, options)
-        
-        letter_map = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
-        student_idx = letter_map.get(student_answer_letter, -1)
-        is_correct = (student_idx == correct_idx)
+        check_multiple_choice_answer(question_id, student_answer_letter)
+        answer_data = service.get_user_answer(question_id) or {}
+        is_correct = bool(answer_data.get("is_correct", False))
         
         return {
             "turn": turn,
@@ -219,42 +208,8 @@ class BenchmarkRunner:
             "subtopics": subtopic_ids,
             "is_correct": is_correct,
             "student_answer": student_answer_letter,
-            "correct_answer": chr(65 + correct_idx),
+            "correct_answer": chr(65 + correct_idx) if 0 <= correct_idx <= 3 else "?",
             "generation_time_seconds": round(generation_time, 2)
-        }
-
-    def _update_mock_service(self, mock_service, history, mock_unified_perf_service):
-        total = len(history)
-        correct = sum(1 for h in history if h['is_correct']) if total > 0 else 0
-        incorrect = total - correct
-        percentage = (correct / total) * 100 if total > 0 else 0
-        recent = history[-5:]
-
-        mock_service.compute_user_score.return_value = {
-            'total_questions': total,
-            'correct_count': correct,
-            'incorrect_count': incorrect,
-            'score_percentage': percentage,
-            'recent_performance': recent
-        }
-
-        mock_service.get_last_question_id.return_value = "mock_id"
-
-        recent_performance_formatted = [
-            {'type': 'mcq', 'is_correct': h['is_correct']}
-            for h in recent
-        ]
-
-        mock_unified_perf_service.compute_unified_performance.return_value = {
-            'overall_percentage': percentage,
-            'total_questions': total,
-            'mcq_count': total,
-            'mcq_correct': correct,
-            'mcq_percentage': percentage,
-            'open_count': 0,
-            'open_avg_score': 0.0,
-            'open_percentage': 0.0,
-            'recent_overall_performance': recent_performance_formatted
         }
 
     def _sleep_with_progress(self, current_turn: int):
