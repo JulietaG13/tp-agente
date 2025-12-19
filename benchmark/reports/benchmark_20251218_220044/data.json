@@ -1,0 +1,303 @@
+{
+  "metadata": {
+    "timestamp": "2025-12-18 22:15:08",
+    "turns_planned": 15,
+    "turns_completed": 15,
+    "persona_type": "NovicePersona",
+    "average_generation_time_seconds": 35.23,
+    "min_generation_time_seconds": 11.79,
+    "max_generation_time_seconds": 60.21,
+    "total_generation_time_seconds": 528.46
+  },
+  "persona_config": {
+    "true_level": 1.5,
+    "target_sensitivity": 0.8,
+    "target_accuracy": 0.78
+  },
+  "results": [
+    {
+      "turn": 1,
+      "question": "En sistemas distribuidos, ¿cuál es la principal diferencia entre comunicación síncrónica y asíncrona entre procesos?",
+      "options": [
+        "La comunicación síncrona es más rápida que la asíncrona en todos los casos",
+        "La comunicación síncrona no requiere confirmación de recepción, mientras que la asíncrona sí la requiere",
+        "La comunicación asíncrona solo funciona con sockets TCP mientras que la síncrona solo funciona con UDP",
+        "La comunicación síncrona requiere que ambos procesos estén activos simultáneamente, mientras que la asíncrona permite que el receptor esté inactivo cuando se envía el mensaje"
+      ],
+      "difficulty_score": 3,
+      "subtopics": [
+        10,
+        11
+      ],
+      "is_correct": true,
+      "student_answer": "D",
+      "correct_answer": "D",
+      "generation_time_seconds": 11.79
+    },
+    {
+      "turn": 2,
+      "question": "Cuando se diseña un sistema distribuido con comunicación entre procesos, ¿cuál es el principal impacto arquitectónico de elegir un modelo de comunicación orientado a mensajes frente a uno basado en llamadas a procedimientos remotos (RPC)?",
+      "options": [
+        "El modelo RPC proporciona mayor acoplamiento temporal entre componentes, mientras que los mensajes permiten mayor desacoplamiento temporal",
+        "El modelo orientado a mensajes solo funciona con protocolos UDP, mientras que RPC solo funciona con TCP",
+        "El modelo orientado a mensajes requiere menos componentes middleware y es más eficiente en términos de recursos",
+        "El modelo RPC es más adecuado para sistemas con alta latencia de red, mientras que los mensajes lo son para redes de alta velocidad"
+      ],
+      "difficulty_score": 4,
+      "subtopics": [
+        11,
+        14
+      ],
+      "is_correct": true,
+      "student_answer": "A",
+      "correct_answer": "A",
+      "generation_time_seconds": 60.21
+    },
+    {
+      "turn": 3,
+      "question": "En un sistema de comercio electrónico distribuido que implementa el patrón SAGA para gestionar transacciones de pedidos, se presenta una situación donde el servicio de inventario confirma reserva pero el servicio de pago falla por timeout en una red con partición parcial. Considerando las propiedades de consistencia eventual y los mecanismos de compensación, ¿cuál es la estrategia más apropiada para mantener la integridad del sistema sin comprometer la disponibilidad durante el tiempo promedio de detección de fallo (FD) de 30 segundos?",
+      "options": [
+        "Asumir que el pago se completó exitosamente después de FD y procesar el pedido normalmente, aceptando el riesgo de inconsistencia para mantener la disponibilidad total",
+        "Implementar un mecanismo de compensación asíncrona que ejecute rollback en cascada después de FD, confirmando la liberación de reservas mediante mensajes idempotentes con reintentos exponenciales, priorizando la disponibilidad sobre consistencia fuerte",
+        "Implementar un sistema de votación distribuida entre todos los servicios para decidir el estado de la transacción, requiriendo mayoría simple (N/2+1) para confirmar compensación",
+        "Detener temporalmente el servicio de inventario durante la partición para mantener consistencia fuerte, aceptando pérdida de disponibilidad pero garantizando que no haya pedidos inconsistentes"
+      ],
+      "difficulty_score": 4,
+      "subtopics": [
+        11,
+        25
+      ],
+      "is_correct": true,
+      "student_answer": "B",
+      "correct_answer": "B",
+      "generation_time_seconds": 18.9
+    },
+    {
+      "turn": 4,
+      "question": "En un sistema de comercio electrónico distribuido global que maneja millones de transacciones por segundo, se implementa un patrón de comunicación entre microservicios donde el servicio de inventario debe notificar sincrónicamente al servicio de almacén para reservar items. Durante un evento de Black Friday, el servicio de almacén experimenta latencias variables (100-5000ms) debido a la carga. El arquitecto propone cambiar la comunicación síncrona RPC por un patrón de mensajería asíncrona con colas persistentes. ¿Cuál es el impacto arquitectónico MÁS crítico de este cambio que el equipo debe considerar?",
+      "options": [
+        "El throughput del sistema se reducirá en un 70% debido al overhead de serialización/deserialización de mensajes en las colas",
+        "La consistencia eventual entre inventario y almacén podría resultar en oversell de productos si no se implementa un mecanismo de compensación robusto tipo SAGA",
+        "El cambio requerirá duplicar la cantidad de servidores ya que cada mensaje necesita ser procesado por al menos dos nodos para garantizar alta disponibilidad",
+        "La latencia de 5000ms se mantendrá igual porque el cuello de botella está en la base de datos, no en el mecanismo de comunicación"
+      ],
+      "difficulty_score": 4,
+      "subtopics": [
+        11,
+        13
+      ],
+      "is_correct": true,
+      "student_answer": "B",
+      "correct_answer": "B",
+      "generation_time_seconds": 32.03
+    },
+    {
+      "turn": 5,
+      "question": "En un sistema de microservicios con alta carga donde los servicios necesitan coordinarse para procesar transacciones complejas, ¿cuál de las siguientes estrategias de comunicación entre procesos minimizaría mejor el acoplamiento temporal mientras mantiene la consistencia eventual en escenarios de fallos de red parciales?",
+      "options": [
+        "Implementar un bus de eventos en memoria compartida (shared memory) entre todos los servicios en el mismo host, con replicación síncrona a través de RDMA para servicios en hosts diferentes",
+        "Establecer conexiones TCP persistentes entre todos los servicios con heartbeats cada 100ms, implementando un protocolo de consenso personalizado para la coordinación",
+        "Utilizar un Message-Oriented Middleware con colas persistentes y patrón SAGA, donde cada servicio publica eventos de dominio y otros servicios se suscriben para actualizar su estado local de forma asíncrona",
+        "Implementar comunicación síncrona con circuit breakers y timeout exponenciales, asegurando que todos los servicios mantengan el mismo estado mediante bloqueos distribuidos"
+      ],
+      "difficulty_score": 5,
+      "subtopics": [
+        11,
+        25
+      ],
+      "is_correct": true,
+      "student_answer": "C",
+      "correct_answer": "C",
+      "generation_time_seconds": 26.39
+    },
+    {
+      "turn": 6,
+      "question": "Está diseñando un sistema de comercio electrónico que debe procesar 100,000 órdenes/segundo con consistencia eventual. El sistema tiene servicios de inventario, pago y envío. Si el servicio de inventario usa comunicación síncrona (RPC) para validar stock, pero el servicio de pago usa mensajería asíncrona para procesar transacciones, ¿cuál es el mayor riesgo arquitectónico que enfrenta y cuál sería la mejor solución?",
+      "options": [
+        "Riesgo de sobrecarga en el servicio de inventario; implementar caché distribuido con TTL dinámico",
+        "Riesgo de pérdida de mensajes de pago; implementar acknowledgments explícitos y dead letter queues",
+        "Riesgo de timeout en RPC bloqueando pagos; migrar todo a mensajería asíncrona con colas persistentes",
+        "Riesgo de inconsistencia temporal entre inventario y pago; implementar un patrón de saga coordinada con compensación de inventario"
+      ],
+      "difficulty_score": 4,
+      "subtopics": [
+        10,
+        11
+      ],
+      "is_correct": false,
+      "student_answer": "C",
+      "correct_answer": "D",
+      "generation_time_seconds": 34.95
+    },
+    {
+      "turn": 7,
+      "question": "Un sistema de comercio electrónico tiene servicios para: inventario (síncrono), pago (asíncrono), y notificaciones (por eventos). En Black Friday, se presentan miles de órdenes simultáneas. El equipo considera: (A) Mantener arquitectura actual con SAGA compensadora, (B) Migrar todo a síncrono con 2PC, (C) Usar event sourcing con CQRS, (D) Implementar patrón outbox con consistencia eventual. Considerando latencia, throughput y complejidad operativa, ¿cuál es la mejor decisión arquitectónica para mantener la consistencia sin sacrificar la disponibilidad?",
+      "options": [
+        "Opción A: Mantener arquitectura actual con SAGA compensadora - permite alta disponibilidad pero requiere diseño cuidadoso de compensaciones",
+        "Opción C: Usar event sourcing con CQRS - ofrece auditoría completa pero aumenta complejidad y eventual consistencia",
+        "Opción D: Implementar patrón outbox con consistencia eventual - balancea entre consistencia y rendimiento con menor complejidad",
+        "Opción B: Migrar todo a síncrono con 2PC - garantiza consistencia fuerte pero introduce latencia y puntos de fallo únicos"
+      ],
+      "difficulty_score": 4,
+      "subtopics": [
+        10,
+        11
+      ],
+      "is_correct": false,
+      "student_answer": "A",
+      "correct_answer": "C",
+      "generation_time_seconds": 38.76
+    },
+    {
+      "turn": 8,
+      "question": "Una plataforma de comercio electrónico procesa 100,000 transacciones por segundo durante picos de demanda. Actualmente usa una arquitectura híbrida con sincronización periódica entre microservicios de inventario y pagos, pero experimenta pérdidas de datos durante picos. ¿Qué patrón de comunicación entre procesos proporciona la mejor solución para mantener la consistencia eventual sin sacrificar el rendimiento?",
+      "options": [
+        "Implementar un bus de eventos con RabbitMQ y confirmaciones manuales, donde cada servicio confirme explícitamente la recepción de eventos antes de procesar",
+        "Implementar el patrón Outbox con una cola de alta velocidad como Apache Kafka, donde cada servicio publica eventos idempotentes a su propio outbox y consumidores asincrónicos procesan la sincronización",
+        "Migrar a comunicación síncrona con el patrón SAGA usando compensaciones transaccionales, garantizando consistencia inmediata entre servicios",
+        "Mantener la arquitectura híbrida actual pero incrementar la frecuencia de sincronización a cada 100ms y agregar Redis para caché distribuido"
+      ],
+      "difficulty_score": 5,
+      "subtopics": [
+        11,
+        25
+      ],
+      "is_correct": false,
+      "student_answer": "A",
+      "correct_answer": "B",
+      "generation_time_seconds": 48.48
+    },
+    {
+      "turn": 9,
+      "question": "En un sistema distribuido, ¿cuál es la principal ventaja de usar comunicación asíncrona en lugar de síncrona entre componentes?",
+      "options": [
+        "Garantiza que los mensajes llegarán en el orden exacto que fueron enviados",
+        "Consume menos memoria porque no necesita buffers de mensajes",
+        "Es más rápida porque no requiere establecer conexiones de red",
+        "Permite que los componentes funcionen independientemente sin esperar respuestas inmediatas"
+      ],
+      "difficulty_score": 3,
+      "subtopics": [
+        10,
+        11
+      ],
+      "is_correct": true,
+      "student_answer": "D",
+      "correct_answer": "D",
+      "generation_time_seconds": 53.85
+    },
+    {
+      "turn": 10,
+      "question": "En un sistema distribuido, ¿cuál es la principal diferencia entre comunicación síncrona y asíncrona entre procesos?",
+      "options": [
+        "La comunicación síncrona requiere que ambos procesos estén activos simultáneamente, mientras que la asíncrona permite que el receptor esté temporalmente inactivo",
+        "La comunicación síncrona solo funciona en la misma máquina, mientras que la asíncrona permite comunicación entre máquinas",
+        "La comunicación asíncrona es más rápida porque no requiere confirmación de recepción",
+        "La comunicación síncrona siempre usa TCP y la asíncrona siempre usa UDP"
+      ],
+      "difficulty_score": 3,
+      "subtopics": [
+        10,
+        11
+      ],
+      "is_correct": true,
+      "student_answer": "A",
+      "correct_answer": "A",
+      "generation_time_seconds": 56.29
+    },
+    {
+      "turn": 11,
+      "question": "En comunicación entre procesos, ¿cuál es la principal diferencia entre sockets TCP y UDP?",
+      "options": [
+        "UDP garantiza la entrega de todos los paquetes mientras que TCP puede perder datos",
+        "TCP es orientado a conexión y garantiza entrega ordenada, mientras que UDP es sin conexión y no garantiza entrega",
+        "TCP es más rápido que UDP para todos los casos de uso",
+        "No hay diferencias significativas, ambos protocolos funcionan igual"
+      ],
+      "difficulty_score": 2,
+      "subtopics": [
+        22
+      ],
+      "is_correct": true,
+      "student_answer": "B",
+      "correct_answer": "B",
+      "generation_time_seconds": 46.35
+    },
+    {
+      "turn": 12,
+      "question": "Una aplicación de e-commerce tiene un servicio de catálogo que debe comunicarse con el servicio de inventario. El catálogo necesita respuestas rápidas para mostrar disponibilidad de productos, mientras que el inventario requiere procesar reservas de manera confiable. ¿Cuál es la mejor estrategia de comunicación para este escenario?",
+      "options": [
+        "Comunicación asíncrona mediante eventos para ambas operaciones con consistencia eventual",
+        "Comunicación completamente síncrona para garantizar consistencia inmediata entre catálogo e inventario",
+        "Implementar un patrón de saga coordinada con comunicación síncrona en todos los pasos",
+        "Comunicación síncrona para consultas de disponibilidad y cola de mensajes para reservas, implementando compensación si hay inconsistencias"
+      ],
+      "difficulty_score": 4,
+      "subtopics": [
+        10,
+        11
+      ],
+      "is_correct": false,
+      "student_answer": "A",
+      "correct_answer": "D",
+      "generation_time_seconds": 13.32
+    },
+    {
+      "turn": 13,
+      "question": "Una plataforma de delivery necesita procesar pedidos con los siguientes requisitos: (1) el stock debe actualizarse inmediatamente para evitar sobrevender, (2) el pago puede tomar hasta 10 segundos por verificación bancaria, (3) la asignación del repartidor puede tardar hasta 30 segundos. El sistema maneja 50K pedidos/hora en hora pico. ¿Qué combinación de comunicación entre procesos minimiza el impacto arquitectónico mientras mantiene la consistencia?",
+      "options": [
+        "Síncrono para stock y asíncrono para pago+repartidor, con compensación SAGA que revierte el stock si el pago falla",
+        "Todo asíncrono mediante colas, implementando eventual consistencia con actualización de stock diferida",
+        "Síncrono para todo, implementando timeout de 30 segundos para garantizar consistencia total",
+        "Asíncrono para stock con reserva temporal, síncrono para pago, y asíncrono para repartidor con rollback manual"
+      ],
+      "difficulty_score": 4,
+      "subtopics": [
+        10,
+        11
+      ],
+      "is_correct": true,
+      "student_answer": "A",
+      "correct_answer": "A",
+      "generation_time_seconds": 22.62
+    },
+    {
+      "turn": 14,
+      "question": "En un sistema de comercio electrónico con microservicios, el servicio de inventario debe actualizarse cuando se realiza una compra. El servicio de pagos procesa la transacción de forma síncrona para garantizar la consistencia financiera, pero la actualización del inventario puede ser asíncrona. ¿Cuál es el principal riesgo de implementar esta comunicación híbrida y cómo mitigarlo?",
+      "options": [
+        "El riesgo es el timeout en la respuesta al cliente, que se resuelve aumentando el tiempo de espera de las peticiones HTTP",
+        "El riesgo es la pérdida de mensajes entre servicios, que se mitiga usando exclusivamente comunicación síncrona para todas las operaciones",
+        "El riesgo es la inconsistencia temporal donde el inventario no refleje inmediatamente la compra, causando sobreventa. Se mitiga implementando el patrón Outbox para garantizar que la actualización del inventario eventualmente ocurra",
+        "El riesgo es la degradación del rendimiento, que se mitiga implementando caché distribuido entre todos los servicios"
+      ],
+      "difficulty_score": 4,
+      "subtopics": [
+        11,
+        34
+      ],
+      "is_correct": true,
+      "student_answer": "C",
+      "correct_answer": "C",
+      "generation_time_seconds": 44.19
+    },
+    {
+      "turn": 15,
+      "question": "Una tienda en línea procesa 50,000 órdenes por hora durante eventos de alta demanda. El sistema usa arquitectura de microservicios donde el servicio de órdenes debe validar el pago síncronamente (crítico para la venta) pero actualizar el inventario y enviar notificaciones asíncronamente. ¿Cuál es la mejor estrategia para garantizar que NINGÚN mensaje se pierda mientras se mantiene el rendimiento?",
+      "options": [
+        "Implementar Two-Phase Commit (2PC) entre todos los servicios para garantizar consistencia inmediata",
+        "Usar comunicación asíncrona total: enviar todos los eventos directamente a colas de mensajes sin validación síncrona del pago",
+        "Enviar eventos directamente desde el servicio de órdenes usando llamadas HTTP asíncronas a cada servicio",
+        "Implementar el patrón Outbox: escribir eventos en una tabla Outbox en la misma transacción de la orden, luego un proceso Worker los lee y envía a Kafka para procesamiento asíncrono"
+      ],
+      "difficulty_score": 4,
+      "subtopics": [
+        11,
+        35
+      ],
+      "is_correct": true,
+      "student_answer": "D",
+      "correct_answer": "D",
+      "generation_time_seconds": 20.33
+    }
+  ]
+}
