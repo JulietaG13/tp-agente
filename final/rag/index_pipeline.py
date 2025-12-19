@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Iterable, Sequence
+from typing import Sequence
 
 from final.rag.indexer import ContentIndexer
-from final.rag.labeler_agent import ChunkForLabel, ChunkSubtopicLabeler
+from final.rag.labeler_agent import ChunkSubtopicLabeler
 from final.rag.vector_store import ChromaVectorStore
 
 
@@ -46,20 +46,22 @@ def _select_taxonomy_samples(chunks: Sequence[str], max_samples: int = 7) -> lis
 
 def index_course_file(
     file_path: str,
-    persist_directory: str = "./chroma_db",
+    persist_directory: str = None,
     collection_name: str = "course_content",
     *,
     force_reset: bool = True,
     chunk_size: int = 400,
     overlap: int = 50,
     max_taxonomy_subtopics: int = 30,
-    label_batch_size: int = 8,
 ) -> IndexResult:
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
+    from final.rag.session_context import default_persist_directory
+    persist_dir = persist_directory or default_persist_directory()
+
     vector_store = ChromaVectorStore(
-        persist_directory=persist_directory,
+        persist_directory=persist_dir,
         collection_name=collection_name,
     )
     if force_reset:
@@ -75,16 +77,6 @@ def index_course_file(
     samples = _select_taxonomy_samples(chunk_texts)
     taxonomy = labeler.extract_taxonomy(samples=samples, max_subtopics=max_taxonomy_subtopics)
 
-    id_to_subtopics: dict[str, list[str]] = {}
-    for i in range(0, len(chunk_texts), label_batch_size):
-        batch_texts = chunk_texts[i : i + label_batch_size]
-        batch_ids = chunk_ids[i : i + label_batch_size]
-        batch = [
-            ChunkForLabel(chunk_id=cid, text=txt)
-            for cid, txt in zip(batch_ids, batch_texts)
-        ]
-        id_to_subtopics.update(labeler.label_chunks(batch, taxonomy))
-
     metadatas = []
     for i, (_, start_pos) in enumerate(chunk_pairs):
         metadatas.append(
@@ -93,7 +85,6 @@ def index_course_file(
                 "chunk_index": i,
                 "start_position": start_pos,
                 "chunk_size": len(chunk_texts[i].split()),
-                "subtopics": id_to_subtopics.get(chunk_ids[i], []),
             }
         )
 

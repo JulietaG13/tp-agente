@@ -5,7 +5,7 @@ import uuid
 from services.service import MCQService
 from services.service_manager import initialize_session_services, get_service, set_service
 from final.rag.index_pipeline import index_course_file
-from final.rag.session_context import RagContext, set_rag_context
+from final.rag.session_context import RagContext, set_rag_context, default_persist_directory
 from final_agent import build_workflow
 from langchain_core.messages import HumanMessage
 from tools.tools import check_last_multiple_choice_answer
@@ -81,7 +81,7 @@ class ChainlitHandler:
         if collection_name:
             set_rag_context(
                 RagContext(
-                    persist_directory="./chroma_db",
+                    persist_directory=default_persist_directory(),
                     collection_name=collection_name,
                     subtopics=tuple(subtopics),
                 )
@@ -102,13 +102,13 @@ class ChainlitHandler:
         collection_name = f"course_content_{uuid.uuid4().hex[:8]}"
         index_result = index_course_file(
             file_path=file_path,
-            persist_directory="./chroma_db",
+            persist_directory=default_persist_directory(),
             collection_name=collection_name,
             force_reset=True,
         )
         set_rag_context(
             RagContext(
-                persist_directory="./chroma_db",
+                persist_directory=default_persist_directory(),
                 collection_name=collection_name,
                 subtopics=index_result.subtopics,
             )
@@ -123,13 +123,13 @@ class ChainlitHandler:
         collection_name = "course_content_chainlit_default"
         index_result = index_course_file(
             file_path=default_path,
-            persist_directory="./chroma_db",
+            persist_directory=default_persist_directory(),
             collection_name=collection_name,
             force_reset=True,
         )
         set_rag_context(
             RagContext(
-                persist_directory="./chroma_db",
+                persist_directory=default_persist_directory(),
                 collection_name=collection_name,
                 subtopics=index_result.subtopics,
             )

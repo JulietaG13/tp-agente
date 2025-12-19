@@ -8,19 +8,10 @@ from tools.tools import (
     get_unified_performance
 )
 from services.service_manager import get_service
-from final.rag.session_context import get_rag_context
+from final.rag.session_context import get_rag_components_cached
 
 def get_rag_components():
-    from final.rag.vector_store import ChromaVectorStore
-    from final.rag.retriever import ContentRetriever
-
-    context = get_rag_context()
-    vector_store = ChromaVectorStore(
-        persist_directory=context.persist_directory,
-        collection_name=context.collection_name,
-    )
-    retriever = ContentRetriever(vector_store)
-    return vector_store, retriever
+    return get_rag_components_cached()
 
 
 @tool

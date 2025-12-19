@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional
 from final.rag.vector_store import ChromaVectorStore
-from final.rag.progress_view import build_chunk_progress_note
+from final.rag.progress_view import chunk_progress_payload, get_chunk_progress, is_mastered
+from final.rag.session_context import record_retrieved_chunk_ids
 
 
 class ContentRetriever:
@@ -40,21 +41,21 @@ class ContentRetriever:
         ids = results.get("ids", [[]])[0] or [None] * len(docs)
 
         candidates = list(zip(ids, docs, metadatas))
-        selected = self._filter_mastered_chunks(candidates, n_results)
+        selected = self._prefer_not_mastered(candidates, n_results)
+        record_retrieved_chunk_ids([str(cid) for cid, _, _ in selected if cid])
 
         formatted_content = []
         for i, (chunk_id, doc, metadata) in enumerate(selected, start=1):
             chunk_index = metadata.get("chunk_index")
-            subtopics = metadata.get("subtopics", [])
-            progress_note = build_chunk_progress_note(str(chunk_id)) if chunk_id else "chunk_status=unknown"
+            progress = get_chunk_progress(str(chunk_id)) if chunk_id else None
+            progress_info = chunk_progress_payload(progress) if progress else {"chunk_status": "unknown"}
             formatted_content.append(
                 "\n".join(
                     [
                         f"[Fragmento {i}]",
                         f"chunk_id: {chunk_id}",
                         f"chunk_index: {chunk_index}",
-                        f"subtopics: {subtopics}",
-                        f"progress: {progress_note}",
+                        f"progress: {progress_info}",
                         f"{doc}",
                         "",
                     ]
@@ -63,15 +64,15 @@ class ContentRetriever:
 
         return "\n".join(formatted_content)
 
-    def _filter_mastered_chunks(self, candidates: List[tuple], n_results: int) -> List[tuple]:
+    def _prefer_not_mastered(self, candidates: List[tuple], n_results: int) -> List[tuple]:
         kept: List[tuple] = []
         deferred: List[tuple] = []
         for chunk_id, doc, metadata in candidates:
             if not chunk_id:
                 kept.append((chunk_id, doc, metadata))
                 continue
-            note = build_chunk_progress_note(str(chunk_id))
-            if "chunk_status=mastered" in note:
+            progress = get_chunk_progress(str(chunk_id))
+            if is_mastered(progress):
                 deferred.append((chunk_id, doc, metadata))
             else:
                 kept.append((chunk_id, doc, metadata))

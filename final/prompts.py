@@ -44,11 +44,12 @@ Devuelve tu respuesta en este formato JSON exacto:
     "question": "texto de la pregunta",
     "options": ["opción A", "opción B", "opción C", "opción D"],
     "correct_index": 0,
-    "source_chunk_ids": ["<chunk_id_1>", "<chunk_id_2>"]
+    "subtopics": ["UNO o DOS de los subtopics listados"]
 }
 
 Donde correct_index es 0-3 indicando cuál opción es la correcta.
-y source_chunk_ids contiene los IDs de los fragmentos (chunks) usados para crear la pregunta."""
+y subtopics debe contener 1 o 2 ítems, y cada ítem debe ser exactamente uno de los subtopics provistos en SUBTOPIC_FOCUS.
+Si se provee TARGET_SUBTOPICS, debes elegir tus subtopics de TARGET_SUBTOPICS."""
 
 
 QUESTION_CREATOR_PROMPT_NO_RAG = """Eres un experto creador de preguntas de opción múltiple. Tu trabajo es:

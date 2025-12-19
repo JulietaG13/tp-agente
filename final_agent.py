@@ -33,7 +33,7 @@ from final.nodes import (
 )
 from final.logs import log_separator, log_user_input, log_user_output
 from final.rag.index_pipeline import index_course_file
-from final.rag.session_context import RagContext, set_rag_context
+from final.rag.session_context import RagContext, set_rag_context, default_persist_directory
 
 load_dotenv()
 colorama_init(autoreset=True)
@@ -142,13 +142,13 @@ def main():
 
         index_result = index_course_file(
             file_path=file_path,
-            persist_directory="./chroma_db",
+            persist_directory=default_persist_directory(),
             collection_name="course_content_cli",
             force_reset=True,
         )
         set_rag_context(
             RagContext(
-                persist_directory="./chroma_db",
+                persist_directory=default_persist_directory(),
                 collection_name="course_content_cli",
                 subtopics=index_result.subtopics,
             )

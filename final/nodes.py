@@ -73,8 +73,13 @@ def extract_json_from_response(content: str) -> dict:
 
 
 import os
-from final.rag.session_context import get_rag_context
-from final.rag.progress_view import build_subtopic_focus_brief
+from final.rag.session_context import (
+    get_rag_context,
+    get_last_retrieved_chunk_ids,
+    clear_last_retrieved_chunk_ids,
+)
+from final.rag.progress_view import build_subtopic_focus_brief, select_target_subtopics
+from final.agent_tools import get_rag_components
 
 def question_creator_node(state: AgentState):
     """Executes Question Creator agent."""
@@ -93,11 +98,32 @@ def question_creator_node(state: AgentState):
     if use_rag:
         prompt = QUESTION_CREATOR_PROMPT
         rag_ctx = get_rag_context()
-        focus_brief = build_subtopic_focus_brief(list(rag_ctx.subtopics)) if rag_ctx.subtopics else "SUBTOPIC_FOCUS:\n- (no_subtopics_available)"
+        focus_brief = build_subtopic_focus_brief(list(rag_ctx.subtopics), max_items=8) if rag_ctx.subtopics else "SUBTOPIC_FOCUS:\n- (no_subtopics_available)"
+        target_subtopics = select_target_subtopics(list(rag_ctx.subtopics), max_topics=2, cooldown_recent_questions=3) if rag_ctx.subtopics else []
+        vector_store, retriever = get_rag_components()
+        try:
+            stats = vector_store.get_collection_stats()
+            log_question_creator(f"RAG collection stats: name={stats.get('name')} count={stats.get('count')}")
+        except Exception:
+            pass
+
+        target_context_parts = []
+        for t in target_subtopics:
+            c = retriever.retrieve_relevant_content(t, n_results=2)
+            if "No se encontró contenido relevante" in c:
+                c = retriever.retrieve_for_question_creation(topic=t, n_results=2)
+            target_context_parts.append(c)
+
+        target_context = "\n\n".join(target_context_parts) if target_context_parts else ""
+        if "No se encontró contenido relevante" in target_context and len(target_subtopics) > 1:
+            target_context = retriever.retrieve_relevant_content(" ".join(target_subtopics), n_results=3)
         message = (
             "Crea una nueva pregunta de opción múltiple basada en el material del curso (usa RAG tools).\n\n"
             f"{focus_brief}\n\n"
-            "INSTRUCCIÓN: Elige un subtopic prioritario de la lista y usa RAG tools para recuperar chunks relevantes. "
+            f"TARGET_SUBTOPICS: {target_subtopics}\n\n"
+            f"TARGET_CONTENT (usa esto como base obligatoria):\n{target_context}\n\n"
+            "INSTRUCCIÓN: Usa exactamente 1 o 2 subtopics, siguiendo TARGET_SUBTOPICS, y devuélvelos en el JSON (campo subtopics). "
+            "Usa RAG tools para recuperar chunks relevantes para esos subtopics. "
             "Evita chunks con guidance=avoid_reusing_if_possible, salvo que sea necesario.\n"
             f"{context}"
         )
@@ -112,6 +138,8 @@ def question_creator_node(state: AgentState):
             message = f"Crea una nueva pregunta de opción múltiple basada en el material del curso.{context}"
 
     try:
+        log_question_creator(f"System prompt (QUESTION_CREATOR_PROMPT):\n{prompt}")
+        log_question_creator(f"Human message (inputs):\n{message}")
         result = agent.invoke({
             "messages": [
                 SystemMessage(content=prompt),
@@ -120,6 +148,7 @@ def question_creator_node(state: AgentState):
         })
 
         response_content = result["messages"][-1].content
+        log_question_creator(f"Raw model output:\n{response_content}")
         if isinstance(response_content, QuestionOutput):
             validated = response_content
         else:
@@ -132,7 +161,7 @@ def question_creator_node(state: AgentState):
             "current_question": validated.question,
             "question_options": validated.options,
             "question_correct_index": validated.correct_index,
-            "source_chunk_ids": getattr(validated, "source_chunk_ids", []),
+            "question_subtopics": target_subtopics if use_rag else getattr(validated, "subtopics", []),
             "messages": [AIMessage(content=f"Pregunta propuesta: {validated.question}")],
             "next_action": "review_difficulty"
         }
@@ -569,11 +598,15 @@ def present_question_node(state: AgentState):
         )
     else:
         log_orchestrator("Pregunta MCQ aprobada, registrando...")
+        source_chunk_ids = list(get_last_retrieved_chunk_ids())
+        clear_last_retrieved_chunk_ids()
+        source_subtopics = list(state.get("question_subtopics") or [])
         formatted_output = register_multiple_choice_question(
             state["current_question"],
             state["question_options"],
             state["question_correct_index"],
-            source_chunk_ids=state.get("source_chunk_ids", []),
+            source_chunk_ids=source_chunk_ids,
+            source_subtopics=source_subtopics,
         )
 
     # Extract the actual UUID from the formatted output

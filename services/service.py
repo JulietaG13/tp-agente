@@ -69,6 +69,23 @@ class MCQService:
             return None
         return max(self._questions.items(), key=lambda item: item[1].get('created_at'))[0]
 
+    def get_current_turn(self) -> int:
+        return self._turn
+
+    def get_recent_question_subtopics(self, limit: int = 5) -> List[str]:
+        if not self._questions:
+            return []
+
+        items = list(self._questions.items())
+        items.sort(key=lambda kv: kv[1].get("created_at"))
+        recent = items[-limit:]
+        out: List[str] = []
+        for _, q in recent:
+            for s in (q.get("source_subtopics") or []):
+                if isinstance(s, str) and s.strip():
+                    out.append(s)
+        return out
+
     def get_chunk_progress(self, chunk_id: str) -> Dict:
         return self._chunk_progress.get(chunk_id, self._empty_progress())
 
