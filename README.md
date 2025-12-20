@@ -28,21 +28,24 @@ pip install -r requirements.txt
 ```
 
 ### 2. Configure API Keys
-Create a `.env` file in the root directory with one of the following:
+Copy `env.example` to `.env` and fill in the values. At minimum, set one of the following API keys:
 
 **Option A: OpenAI (Recommended)**
 ```bash
 OPENAI_API_KEY=your_openai_api_key_here
-CONTENT_PATH=SD-Com.txt
 ```
 
 **Option B: Groq**
 ```bash
 GROQ_API_KEY=your_groq_api_key_here
-CONTENT_PATH=SD-Com.txt
 ```
 
-The system will use OpenAI if available, otherwise fall back to Groq. If neither key is set, the application will exit with an error.
+**Option C: Anthropic**
+```bash
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+```
+
+The system will use OpenAI if available, otherwise fall back to Anthropic, then Groq. If none are set, the application will exit with an error.
 
 ### 3. Run the Application
 
