@@ -2,6 +2,24 @@
 
 This project implements an intelligent multi-agent system designed to deliver adaptive educational content. It uses a graph-based agent architecture (LangGraph) to generate questions, evaluate student answers, and adapt the difficulty level based on performance, simulating a personalized tutoring experience.
 
+## Success criteria
+
+We consider the system “working” when, across a session:
+
+- **Adaptivity**: question difficulty tracks the student profile (novice is not overwhelmed; expert isn’t bored).
+- **Coverage**: the agent explores the syllabus instead of looping on the same few subtopics.
+- **Recovery**: after mistakes, the agent reacts (difficulty and feedback) and the student recovers on later encounters.
+
+## Agents
+
+At runtime we run a small graph of specialized agents (implemented as LangGraph nodes):
+
+- **Orchestrator**: decides what to do next (ask for feedback, generate a new question, or end the turn).
+- **Question creator**: generates the next question (MCQ or open) based on the session state and (optionally) retrieved context.
+- **Difficulty reviewer**: sanity-checks the generated question and nudges difficulty up/down to keep the session on target.
+- **Feedback agent**: provides corrective feedback and short remediation after the student answers.
+- **Presenter**: formats/commits the final question payload back to the UI.
+
 ## Setup
 
 ### 1. Install Dependencies
@@ -72,24 +90,6 @@ We test against two distinct profiles to validate adaptivity:
 *   **Novice**: Makes frequent mistakes, especially on complex topics. Tests if the system lowers difficulty and offers remediation.
 *   **Expert**: Consistently answers correctly. Tests if the system raises difficulty to challenge the user.
 
-### Running a Benchmark
-
-The process is decoupled into **execution** and **reporting** to allow for data inspection and manual adjustment if needed.
-
-**1. Execute the Benchmark**
-Runs the simulation and saves raw data (JSON) to `benchmark/reports/`.
-```bash
-# Run 15 turns with an Expert persona
-python -m benchmark.benchmark_main --persona Expert --turns 15
-```
-*Arguments: `--persona` (Expert/Novice), `--turns` (number of questions).*
-
-**2. Generate the Report**
-Reads the raw data and creates a comprehensive Markdown report with visualization matrices and scored metrics.
-```bash
-python benchmark/generate_report.py benchmark/reports/<timestamp_folder>/data.json
-```
-
 ### Key Metrics
 The report evaluates the system on:
 *   **Effective Curriculum Coverage (ECC)**: Measures the system's effectiveness in guiding the student to master the full syllabus, rewarding broad topic coverage over repetition.
@@ -98,3 +98,10 @@ The report evaluates the system on:
 *   **Error Sensitivity**: Whether the system reacts appropriately (drops difficulty) when errors occur.
 
 These metrics are weighted and aggregated into a **Final Score** to provide a single, overall quality assessment of the adaptive session.
+
+Metric definitions and scoring details live in [docs/benchmarking-metrics.md](docs/benchmarking-metrics.md).
+
+## See more
+
+- Benchmark report (RAG): [benchmark/reports/benchmark_20251218_194832-rag/report.md](benchmark/reports/benchmark_20251218_194832-rag/report.md)
+- Benchmark report (no RAG): [benchmark/reports/benchmark_20251218_195552-no_rag/report.md](benchmark/reports/benchmark_20251218_195552-no_rag/report.md)
